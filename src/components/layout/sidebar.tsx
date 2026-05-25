@@ -20,10 +20,10 @@ export default function Sidebar() {
         <Link to="/users" className="block hover:underline">
           Users
         </Link>
-      </div>
       <Link to="/queues" className="block hover:underline">
         Queues
       </Link>
+    </div>
     </div>
   );
 }

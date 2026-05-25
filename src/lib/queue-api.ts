@@ -34,7 +34,6 @@ export const queueApi = {
     });
   },
 
-  // ✅ FIXED: Safely forwards the completely filled out structure containing projectId
   assignTicket: async (
     ticketNumber: string,
     payload: {
