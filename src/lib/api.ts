@@ -1,6 +1,11 @@
+const currentHost =
+  typeof window !== "undefined"
+    ? window.location.hostname
+    : "localhost";
+
 const BASE_URL =
   import.meta.env.VITE_API_BASE_URL ??
-  "http://localhost:8080";
+  `http://${currentHost}:8080`;
 
 const ACCESS_KEY = "accessToken";
 const REFRESH_KEY = "refreshToken";
@@ -15,7 +20,9 @@ export const tokenStore = {
       return null;
     }
 
-    return localStorage.getItem(ACCESS_KEY);
+    return localStorage.getItem(
+      ACCESS_KEY
+    );
   },
 
   getRefresh: (): string | null => {
@@ -23,7 +30,9 @@ export const tokenStore = {
       return null;
     }
 
-    return localStorage.getItem(REFRESH_KEY);
+    return localStorage.getItem(
+      REFRESH_KEY
+    );
   },
 
   set: (
@@ -92,7 +101,8 @@ function getTokenExp(
       )
     );
 
-    return typeof payload.exp === "number"
+    return typeof payload.exp ===
+      "number"
       ? payload.exp * 1000
       : null;
   } catch {
@@ -120,19 +130,17 @@ function isExpiringSoon(
 ======================================================= */
 
 let refreshInFlight:
-  Promise<string | null> | null = null;
+  Promise<string | null> | null =
+  null;
 
 async function refreshAccessToken():
   Promise<string | null> {
-
   if (refreshInFlight) {
     return refreshInFlight;
   }
 
   refreshInFlight = (async () => {
-
     try {
-
       console.log(
         "CALLING REFRESH API..."
       );
@@ -142,8 +150,16 @@ async function refreshAccessToken():
         {
           method: "POST",
 
-          // IMPORTANT
+          /*
+            IMPORTANT
+            THIS IS THE FIX
+          */
           credentials: "include",
+
+          headers: {
+            "Content-Type":
+              "application/json",
+          },
         }
       );
 
@@ -153,7 +169,6 @@ async function refreshAccessToken():
       );
 
       if (!response.ok) {
-
         tokenStore.clear();
 
         return null;
@@ -168,21 +183,22 @@ async function refreshAccessToken():
       );
 
       const newAccessToken =
-        data.data.accessToken;
+        data.data?.accessToken;
 
       const newRefreshToken =
-        data.data.refreshToken;
+        data.data?.refreshToken;
 
-      // SAVE TOKENS
+      if (!newAccessToken) {
+        return null;
+      }
+
       tokenStore.set(
         newAccessToken,
         newRefreshToken
       );
 
       return newAccessToken;
-
     } catch (error) {
-
       console.error(
         "REFRESH FAILED:",
         error
@@ -191,41 +207,12 @@ async function refreshAccessToken():
       tokenStore.clear();
 
       return null;
-
     } finally {
-
       refreshInFlight = null;
     }
-
   })();
 
   return refreshInFlight;
-}
-/* =======================================================
-   ACCESS TOKEN VALIDATION
-======================================================= */
-
-async function getValidAccessToken():
-  Promise<string | null> {
-
-  const token =
-    tokenStore.getAccess();
-
-  if (!token) {
-    return null;
-  }
-
-  // refresh before expiry
-  if (isExpiringSoon(token)) {
-
-    console.log(
-      "TOKEN EXPIRING SOON..."
-    );
-
-    return await refreshAccessToken();
-  }
-
-  return token;
 }
 
 /* =======================================================
@@ -236,30 +223,29 @@ export async function apiFetch<T>(
   path: string,
   init: RequestInit & {
     auth?: boolean;
+    _retry?: boolean;
   } = {}
 ): Promise<T> {
-
   const {
     auth = true,
     headers,
+    _retry = false,
     ...rest
   } = init;
 
+  let accessToken = auth
+    ? tokenStore.getAccess()
+    : null;
+
   /* =========================================
-     ALWAYS GET LATEST TOKEN
+     PROACTIVE REFRESH
   ========================================= */
 
-  let accessToken =
-    auth
-      ? tokenStore.getAccess()
-      : null;
-
-  // Refresh token before expiry
   if (
+    auth &&
     accessToken &&
     isExpiringSoon(accessToken)
   ) {
-
     console.log(
       "TOKEN EXPIRING -> REFRESH"
     );
@@ -269,12 +255,13 @@ export async function apiFetch<T>(
   }
 
   /* =========================================
-     BUILD HEADERS
+     HEADERS
   ========================================= */
 
-  const requestHeaders:
-    Record<string, string> = {
-
+  const requestHeaders: Record<
+    string,
+    string
+  > = {
     "Content-Type":
       "application/json",
 
@@ -284,12 +271,9 @@ export async function apiFetch<T>(
     >),
   };
 
-  // Remove old authorization
   delete requestHeaders.Authorization;
 
-  // Add latest token
   if (auth && accessToken) {
-
     requestHeaders.Authorization =
       `Bearer ${accessToken}`;
   }
@@ -303,6 +287,10 @@ export async function apiFetch<T>(
     {
       ...rest,
 
+      /*
+        IMPORTANT
+        INCLUDE COOKIES
+      */
       credentials: "include",
 
       headers: requestHeaders,
@@ -316,9 +304,8 @@ export async function apiFetch<T>(
   if (
     response.status === 401 &&
     auth &&
-    !(init as any)._retry
+    !_retry
   ) {
-
     console.log(
       "401 RECEIVED -> REFRESHING"
     );
@@ -327,7 +314,6 @@ export async function apiFetch<T>(
       await refreshAccessToken();
 
     if (newAccessToken) {
-
       console.log(
         "RETRYING WITH NEW TOKEN"
       );
@@ -335,33 +321,28 @@ export async function apiFetch<T>(
       response = await fetch(
         `${BASE_URL}${path}`,
         {
-          method: rest.method,
-
-          body: rest.body,
+          ...rest,
 
           credentials: "include",
 
           headers: {
-            "Content-Type":
-              "application/json",
-
-            ...(headers as Record<
-              string,
-              string
-            >),
+            ...requestHeaders,
 
             Authorization:
               `Bearer ${newAccessToken}`,
           },
         }
       );
-
     } else {
-
       tokenStore.clear();
 
-      window.location.href =
-        "/login";
+      if (
+        typeof window !==
+        "undefined"
+      ) {
+        window.location.href =
+          "/login";
+      }
 
       throw new Error(
         "Session expired"
@@ -370,11 +351,10 @@ export async function apiFetch<T>(
   }
 
   /* =========================================
-     FINAL ERROR HANDLING
+     FINAL ERROR
   ========================================= */
 
   if (!response.ok) {
-
     const errorText =
       await response.text();
 
@@ -385,36 +365,26 @@ export async function apiFetch<T>(
 
     throw new Error(
       errorText ||
-      `Request failed: ${response.status}`
+        `Request failed: ${response.status}`
     );
   }
 
   /* =========================================
-     SAFE RESPONSE PARSING
+     SAFE JSON PARSE
   ========================================= */
 
   const responseText =
     await response.text();
 
-  /*
-    Empty response body
-  */
   if (!responseText) {
-
     return {} as T;
   }
 
-  /*
-    Parse JSON safely
-  */
   try {
-
     return JSON.parse(
       responseText
     );
-
   } catch (error) {
-
     console.error(
       "JSON PARSE ERROR:",
       error
@@ -426,35 +396,31 @@ export async function apiFetch<T>(
     );
 
     throw new Error(
-      "Invalid JSON response from server"
+      "Invalid JSON response"
     );
   }
 }
+
 /* =======================================================
    AUTH API
 ======================================================= */
 
 export const authApi = {
-
   login: async (
     body: LoginRequest
   ) => {
-
     const response =
       await apiFetch<{
         data: LoginResponse;
-      }>(
-        "/auth/login",
-        {
-          method: "POST",
+      }>("/auth/login", {
+        method: "POST",
 
-          body: JSON.stringify(
-            body
-          ),
+        body: JSON.stringify(
+          body
+        ),
 
-          auth: false,
-        }
-      );
+        auth: false,
+      });
 
     return response.data;
   },
@@ -462,22 +428,18 @@ export const authApi = {
   signup: async (
     body: SignupRequest
   ) => {
-
     const response =
       await apiFetch<{
         data: LoginResponse;
-      }>(
-        "/auth/signup",
-        {
-          method: "POST",
+      }>("/auth/signup", {
+        method: "POST",
 
-          body: JSON.stringify(
-            body
-          ),
+        body: JSON.stringify(
+          body
+        ),
 
-          auth: false,
-        }
-      );
+        auth: false,
+      });
 
     return response.data;
   },

@@ -23,6 +23,9 @@ export default function Sidebar() {
       <Link to="/queues" className="block hover:underline">
         Queues
       </Link>
+      <Link to="/chat" className="block hover:underline">
+        Chat
+      </Link>
     </div>
     </div>
   );
