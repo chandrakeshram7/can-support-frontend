@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { ChevronDown, ChevronRight, CheckCircle2, AlertCircle } from "lucide-react";
+import { ChevronDown, ChevronRight, CheckCircle2, AlertCircle, Paperclip, Download } from "lucide-react";
 
 import { ticketApi, Ticket, UserDropdown, ProjectDropdown } from "@/lib/ticket-api";
 
@@ -10,14 +10,12 @@ export const Route = createFileRoute("/_authenticated/ticket/$ticketNumber")({
 
 function TicketDetailsPage() {
   const { ticketNumber } = Route.useParams();
-
   const [ticket, setTicket] = useState<Ticket | null>(null);
-
   const [loading, setLoading] = useState(true);
+  
+  const currentHost = typeof window !== "undefined" ? window.location.hostname : "localhost";
 
-  /*
-    SUCCESS / ERROR UI MESSAGE
-  */
+  /* SUCCESS / ERROR UI MESSAGE */
   const [uiMessage, setUiMessage] = useState<{
     type: "success" | "error";
     text: string;
@@ -32,162 +30,177 @@ function TicketDetailsPage() {
   const loadTicket = async (id: string) => {
     try {
       setLoading(true);
-
       const response = await ticketApi.getTicketInfo(id);
-
       const ticketData = response.data ? response.data : response;
-
       setTicket(ticketData);
     } catch (e) {
       console.error("Failed to load ticket:", e);
-
       setTicket(null);
     } finally {
       setLoading(false);
     }
   };
 
-  /*
-    AUTO HIDE MESSAGE
-  */
+  /* AUTO HIDE MESSAGE */
   useEffect(() => {
     if (uiMessage) {
       const timer = setTimeout(() => {
         setUiMessage(null);
       }, 4000);
-
       return () => clearTimeout(timer);
     }
   }, [uiMessage]);
 
   if (loading) {
-    return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
+    return <div className="flex items-center justify-center min-h-screen font-medium text-gray-500">Loading...</div>;
   }
 
   if (!ticket) {
-    return <div className="p-6 text-red-500">Ticket not found</div>;
+    return <div className="p-6 text-red-500 font-semibold">Ticket not found</div>;
   }
 
+  // ✅ AUTHENTICATED ATTACHMENT DOWNLOAD HANDLER
+  const handleAuthenticatedDownload = async (fileId: number, fileName: string) => {
+    try {
+      const response = await fetch(`http://${currentHost}:8080/api/attachments/download/${fileId}`, {
+        method: "GET",
+        headers: {
+          "Authorization": `Bearer ${localStorage.getItem("accessToken")}`
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`Download failed with status: ${response.status}`);
+      }
+
+      // Convert response stream to memory binary blob object
+      const blob = await response.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+
+      // Create an internal virtual link anchor to trigger browser download engine
+      const downloadAnchor = document.createElement("a");
+      downloadAnchor.href = blobUrl;
+      downloadAnchor.setAttribute("download", fileName);
+      document.body.appendChild(downloadAnchor);
+      downloadAnchor.click();
+      
+      // Garbage collection cleanup
+      downloadAnchor.remove();
+      window.URL.revokeObjectURL(blobUrl);
+    } catch (err) {
+      console.error("Failed to fetch attachment stream securely:", err);
+      setUiMessage({ type: "error", text: "Secure file download failed." });
+    }
+  };
+
   return (
-    <div className="p-6 bg-gray-100 min-h-screen">
-      {/* ===================================================== */}
+    <div className="p-6 bg-gray-100 min-h-screen font-sans">
       {/* TOP UI ALERT */}
-      {/* ===================================================== */}
-
       {uiMessage && (
-        <div
-          className={`mb-4 flex items-center gap-3 rounded-lg p-4 shadow text-white ${
-            uiMessage.type === "success" ? "bg-green-600" : "bg-red-600"
-          }`}
-        >
+        <div className={`mb-4 max-w-6xl mx-auto flex items-center gap-3 rounded-xl p-4 shadow-sm text-white transition-all ${
+          uiMessage.type === "success" ? "bg-green-600" : "bg-red-600"
+        }`}>
           {uiMessage.type === "success" ? <CheckCircle2 size={20} /> : <AlertCircle size={20} />}
-
-          <span>{uiMessage.text}</span>
+          <span className="font-medium text-sm">{uiMessage.text}</span>
         </div>
       )}
 
-      <div className="bg-white rounded-lg shadow p-6 max-w-6xl mx-auto">
-        {/* ===================================================== */}
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-200/80 p-6 max-w-6xl mx-auto">
         {/* HEADER */}
-        {/* ===================================================== */}
-
-        <div className="flex justify-between border-b pb-4">
+        <div className="flex justify-between items-start border-b border-gray-100 pb-4">
           <div>
-            <h1 className="text-3xl font-bold">{ticket.subject}</h1>
-
-            <p className="text-gray-500 mt-1">{ticket.ticketNumber}</p>
+            <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">{ticket.subject}</h1>
+            <p className="text-gray-400 font-semibold text-xs mt-1 uppercase tracking-wider">{ticket.ticketNumber}</p>
           </div>
 
-          <span
-            className={`px-4 py-2 rounded text-sm font-bold uppercase ${
-              ticket.ticketStatus === "OPEN"
-                ? "bg-yellow-100 text-yellow-700"
-                : ticket.ticketStatus === "ASSIGNED"
-                  ? "bg-blue-100 text-blue-700"
-                  : ticket.ticketStatus === "RESOLVED"
-                    ? "bg-green-100 text-green-700"
-                    : "bg-gray-100 text-gray-700"
-            }`}
-          >
+          <span className={`px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-wide ${
+            ticket.ticketStatus === "OPEN"
+              ? "bg-yellow-100 text-yellow-700"
+              : ticket.ticketStatus === "ASSIGNED"
+                ? "bg-blue-100 text-blue-700"
+                : ticket.ticketStatus === "RESOLVED"
+                  ? "bg-green-100 text-green-700"
+                  : "bg-gray-100 text-gray-700"
+          }`}>
             {ticket.ticketStatus}
           </span>
         </div>
 
-        {/* ===================================================== */}
+        {/* INITIAL ROOT ATTACHMENTS (FILES ATTACHED DURING TICKET CREATION) */}
+        {ticket.attachments && ticket.attachments.length > 0 && (
+          <div className="mt-4 p-4 bg-slate-50 rounded-xl border border-slate-200/60">
+            <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2.5 flex items-center gap-1">
+              <Paperclip size={14} /> Initial Mail Attachments ({ticket.attachments.length})
+            </h3>
+            <div className="flex flex-wrap gap-2">
+              {ticket.attachments.map((file) => (
+                <button
+                  key={file.id}
+                  onClick={() => handleAuthenticatedDownload(file.id, file.fileName)}
+                  className="flex items-center gap-2 px-3 py-2 bg-white hover:bg-blue-50/50 border border-gray-200 hover:border-blue-300 rounded-xl transition-all text-gray-700 hover:text-blue-600 text-xs font-semibold group shadow-sm text-left"
+                >
+                  <Download size={12} className="text-gray-400 group-hover:text-blue-500 transition-colors" />
+                  <span className="truncate max-w-[220px]">{file.fileName}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* META */}
-        {/* ===================================================== */}
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mt-6 bg-gray-50 p-5 rounded-lg">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mt-6 bg-gray-50/70 border border-gray-100 p-5 rounded-xl">
           <div>
-            <p className="text-xs uppercase text-gray-500 font-bold">Customer Email</p>
-
-            <p className="mt-1">{ticket.customerMail}</p>
+            <p className="text-xs uppercase text-gray-400 font-bold tracking-wider">Customer Email</p>
+            <p className="mt-1 font-medium text-gray-700 text-sm">{ticket.customerMail}</p>
           </div>
-
           <div>
-            <p className="text-xs uppercase text-gray-500 font-bold">Assigned Owner</p>
-
-            <p className="mt-1">{ticket.assignedMember?.username || "Unassigned"}</p>
+            <p className="text-xs uppercase text-gray-400 font-bold tracking-wider">Assigned Owner</p>
+            <p className="mt-1 font-medium text-gray-700 text-sm">{ticket.assignedMember?.username || "Unassigned"}</p>
           </div>
-
           <div>
-            <p className="text-xs uppercase text-gray-500 font-bold">Project</p>
-
-            <p className="mt-1">{ticket.project?.projectName || "No Project"}</p>
+            <p className="text-xs uppercase text-gray-400 font-bold tracking-wider">Project</p>
+            <p className="mt-1 font-medium text-gray-700 text-sm">{ticket.project?.projectName || "No Project Assigned"}</p>
           </div>
-
           <div>
-            <p className="text-xs uppercase text-gray-500 font-bold">Created At</p>
-
-            <p className="mt-1">{new Date(ticket.createdAt).toLocaleString()}</p>
+            <p className="text-xs uppercase text-gray-400 font-bold tracking-wider">Created At</p>
+            <p className="mt-1 font-medium text-gray-700 text-sm">{new Date(ticket.createdAt).toLocaleString()}</p>
           </div>
         </div>
 
-        {/* ===================================================== */}
-        {/* ACTIONS */}
-        {/* ===================================================== */}
-
+        {/* ACTIONS BUTTONS GRID COMPONENT */}
         <TicketActionButtons
           ticket={ticket}
           onActionSuccess={(message, type) => {
-            setUiMessage({
-              text: message,
-              type,
-            });
-
+            setUiMessage({ text: message, type });
             loadTicket(ticket.ticketNumber);
           }}
         />
 
-        {/* ===================================================== */}
         {/* HISTORY TABLE */}
-        {/* ===================================================== */}
-
         <div className="mt-10">
-          <h2 className="text-2xl font-bold mb-5">Ticket History</h2>
-
-          <div className="overflow-x-auto border rounded-lg">
+          <h2 className="text-2xl font-bold text-gray-800 tracking-tight mb-5">Ticket History</h2>
+          <div className="overflow-x-auto border border-gray-200 rounded-xl bg-white shadow-sm">
             <table className="w-full border-collapse">
-              <thead className="bg-gray-100">
+              <thead className="bg-gray-50/70 text-gray-500 text-xs font-bold uppercase tracking-wider border-b border-gray-200">
                 <tr>
-                  <th className="text-left p-4 border-b">Sender</th>
-
-                  <th className="text-left p-4 border-b">Date</th>
-
-                  <th className="text-left p-4 border-b">Preview</th>
-
-                  <th className="text-left p-4 border-b w-[100px]">Action</th>
+                  <th className="text-left p-4">Sender</th>
+                  <th className="text-left p-4">Date</th>
+                  <th className="text-left p-4">Preview</th>
+                  <th className="text-left p-4 w-[120px]">Action</th>
                 </tr>
               </thead>
-
-              <tbody>
+              <tbody className="divide-y divide-gray-100 text-sm">
                 {ticket.conversations?.length ? (
                   ticket.conversations.map((convo, index) => (
-                    <HistoryRow key={index} convo={convo} />
+                    <HistoryRow 
+                      key={index} 
+                      convo={convo} 
+                      onDownload={handleAuthenticatedDownload} 
+                    />
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={4} className="p-6 text-center text-gray-500">
+                    <td colSpan={4} className="p-8 text-center text-gray-400 font-medium">
                       No conversation history found
                     </td>
                   </tr>
@@ -202,41 +215,59 @@ function TicketDetailsPage() {
 }
 
 /* ========================================================= */
-/* HISTORY ROW */
+/* HISTORY ROW COMPONENT */
 /* ========================================================= */
-
-function HistoryRow({ convo }: any) {
+function HistoryRow({ convo, onDownload }: { convo: any; onDownload: (id: number, name: string) => void }) {
   const [expanded, setExpanded] = useState(false);
+  const hasAttachments = convo.attachments && convo.attachments.length > 0;
 
   return (
     <>
-      <tr className="border-b hover:bg-gray-50">
-        <td className="p-4 font-medium text-blue-600">{convo.sender}</td>
-
-        <td className="p-4 text-sm text-gray-500">{new Date(convo.createdAt).toLocaleString()}</td>
-
-        <td className="p-4 text-sm text-gray-700">
-          {convo.message?.slice(0, 80)}
-          ...
+      <tr className="hover:bg-gray-50/60 transition-all group">
+        <td className="p-4 font-semibold text-blue-600 truncate max-w-[200px]">{convo.sender}</td>
+        <td className="p-4 text-xs text-gray-400 font-medium">{new Date(convo.createdAt).toLocaleString()}</td>
+        <td className="p-4 text-gray-600 max-w-[350px] truncate font-medium">
+          {hasAttachments && <span className="inline-block mr-1.5 text-xs text-slate-400" title="Contains files">📎</span>}
+          {convo.message || <span className="italic text-gray-300">Empty message body</span>}
         </td>
-
         <td className="p-4">
           <button
             onClick={() => setExpanded(!expanded)}
-            className="flex items-center gap-1 text-blue-600 hover:text-blue-800"
+            className="flex items-center gap-1 font-bold text-xs text-blue-600 hover:text-blue-800 transition-colors"
           >
-            {expanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+            {expanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
             View
           </button>
         </td>
       </tr>
 
       {expanded && (
-        <tr className="bg-gray-50 border-b">
+        <tr className="bg-slate-50/60 border-t border-b border-gray-200/50">
           <td colSpan={4} className="p-5">
-            <div className="whitespace-pre-wrap text-sm text-gray-700 leading-relaxed">
+            <div className="whitespace-pre-wrap text-sm text-gray-700 leading-relaxed font-medium bg-white border border-gray-200 rounded-xl p-4 shadow-inner">
               {convo.message}
             </div>
+
+            {/* CONVERSATION REPLY INLINE ATTACHMENTS */}
+            {hasAttachments && (
+              <div className="mt-4 pt-3 border-t border-gray-200/60">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-2 flex items-center gap-1">
+                  <Paperclip size={12} /> Email Reply Attachments ({convo.attachments.length})
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {convo.attachments.map((file: any) => (
+                    <button
+                      key={file.id}
+                      onClick={() => onDownload(file.id, file.fileName)}
+                      className="flex items-center gap-2 px-3 py-1.5 bg-white hover:bg-blue-50 border border-gray-200 hover:border-blue-200 rounded-lg transition-all text-gray-700 hover:text-blue-600 text-xs font-semibold group shadow-sm text-left"
+                    >
+                      <Download size={11} className="text-gray-400 group-hover:text-blue-500 transition-colors" />
+                      <span className="truncate max-w-[150px] underline">{file.fileName}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </td>
         </tr>
       )}
@@ -245,9 +276,8 @@ function HistoryRow({ convo }: any) {
 }
 
 /* ========================================================= */
-/* ACTION BUTTONS */
+/* ACTION BUTTONS COMPONENT */
 /* ========================================================= */
-
 function TicketActionButtons({
   ticket,
   onActionSuccess,
@@ -256,92 +286,71 @@ function TicketActionButtons({
   onActionSuccess: (message: string, type: "success" | "error") => void;
 }) {
   const [submitting, setSubmitting] = useState(false);
-
   const [resolutionText, setResolutionText] = useState("");
-
   const [memberId, setMemberId] = useState("");
-
   const [projectId, setProjectId] = useState("");
-
   const [users, setUsers] = useState<UserDropdown[]>([]);
-
   const [projects, setProjects] = useState<ProjectDropdown[]>([]);
 
   useEffect(() => {
     loadDropdownData();
   }, []);
 
+  // ✅ SAFELY PARTITIONED DROPDOWN EXECUTIONS
   const loadDropdownData = async () => {
     try {
-      const [usersResponse, projectsResponse] = await Promise.all([
-        ticketApi.getAllUsers(),
-        ticketApi.getAllProjects(),
-      ]);
+      try {
+        const usersResponse = await ticketApi.getAllUsers();
+        setUsers(usersResponse || []);
+      } catch (uErr) {
+        console.error("Failed to fetch user roles matrix dropdown:", uErr);
+      }
 
-      setUsers(usersResponse || []);
-
-      setProjects(projectsResponse || []);
+      try {
+        const projectsResponse = await ticketApi.getAllProjects();
+        setProjects(projectsResponse || []);
+      } catch (pErr) {
+        console.error("Access Denied on projects dropdown retrieval:", pErr);
+        setProjects([]); // Fallback array ensures view initialization continues safely
+      }
     } catch (e) {
-      console.error(e);
+      console.error("General error during drop-down listing parsing:", e);
     }
   };
 
-  /* ===================================================== */
-  /* ASSIGN */
-  /* ===================================================== */
-
   const handleAssignTicket = async (e: React.FormEvent) => {
     e.preventDefault();
-
-    if (!memberId || !projectId) {
-      return;
-    }
+    if (!memberId || !projectId) return;
 
     try {
       setSubmitting(true);
-
       await ticketApi.assign({
         ticketNumber: ticket.ticketNumber,
-
         assignedMemberId: Number(memberId),
-
         projectId: Number(projectId),
       });
-
       onActionSuccess("Ticket assigned successfully", "success");
     } catch (e) {
       console.error(e);
-
       onActionSuccess("Failed to assign ticket", "error");
     } finally {
       setSubmitting(false);
     }
   };
 
-  /* ===================================================== */
-  /* RESOLVE */
-  /* ===================================================== */
-
-  const handleResolveTicket = async () => {
-    if (!resolutionText.trim()) {
-      return;
-    }
+  const handleCreateResolution = async () => {
+    if (!resolutionText.trim()) return;
 
     try {
       setSubmitting(true);
-
       await ticketApi.resolve({
         ticketNumber: ticket.ticketNumber,
-
         resolution: resolutionText,
       });
-
       setResolutionText("");
-
       onActionSuccess("Ticket resolved successfully", "success");
     } catch (e) {
       console.error(e);
-
       onActionSuccess("Failed to resolve ticket", "error");
     } finally {
       setSubmitting(false);
@@ -350,54 +359,39 @@ function TicketActionButtons({
 
   return (
     <div className="mt-8 space-y-6">
-      {/* ===================================================== */}
       {/* ASSIGN SECTION */}
-      {/* ===================================================== */}
-
       {(ticket.ticketStatus === "OPEN" ||
         ticket.ticketStatus === "ASSIGNED" ||
         ticket.ticketStatus === "RE_OPENED") && (
-        <div className="bg-gray-50 border rounded-lg p-5">
-          <h2 className="text-lg font-bold mb-4">Assign Ticket</h2>
-
-          <form
-            onSubmit={handleAssignTicket}
-            className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end"
-          >
+        <div className="bg-gray-50 border border-gray-200/70 rounded-xl p-5 shadow-inner">
+          <h2 className="text-base font-bold text-gray-800 mb-4">Assign Ticket</h2>
+          <form onSubmit={handleAssignTicket} className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
             <div>
-              <label className="block text-sm font-medium mb-1">Assign Team Member</label>
-
+              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Assign Team Member</label>
               <select
                 value={memberId}
                 onChange={(e) => setMemberId(e.target.value)}
-                className="w-full border rounded px-3 py-2"
+                className="w-full border border-gray-300 rounded-xl bg-white px-3 py-2 text-sm outline-none focus:border-blue-500 transition-all"
                 required
               >
                 <option value="">Select Team Member</option>
-
                 {users.map((user) => (
-                  <option key={user.id} value={user.id}>
-                    {user.username}
-                  </option>
+                  <option key={user.id} value={user.id}>{user.username}</option>
                 ))}
               </select>
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-1">Select Project</label>
-
+              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Select Project</label>
               <select
                 value={projectId}
                 onChange={(e) => setProjectId(e.target.value)}
-                className="w-full border rounded px-3 py-2"
+                className="w-full border border-gray-300 rounded-xl bg-white px-3 py-2 text-sm outline-none focus:border-blue-500 transition-all"
                 required
               >
                 <option value="">Select Project</option>
-
                 {projects.map((project) => (
-                  <option key={project.id} value={project.id}>
-                    {project.projectName}
-                  </option>
+                  <option key={project.id} value={project.id}>{project.projectName}</option>
                 ))}
               </select>
             </div>
@@ -405,7 +399,7 @@ function TicketActionButtons({
             <button
               type="submit"
               disabled={submitting}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded font-medium"
+              className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white font-bold px-5 py-2 rounded-xl transition-all shadow-sm text-sm"
             >
               {submitting ? "Assigning..." : "Assign Ticket"}
             </button>
@@ -413,26 +407,21 @@ function TicketActionButtons({
         </div>
       )}
 
-      {/* ===================================================== */}
-      {/* RESOLUTION */}
-      {/* ===================================================== */}
-
+      {/* RESOLUTION SECTION */}
       {ticket.ticketStatus === "ASSIGNED" && (
-        <div className="bg-gray-50 border rounded-lg p-5">
-          <h2 className="text-lg font-bold mb-4">Resolve Ticket</h2>
-
+        <div className="bg-gray-50 border border-gray-200/70 rounded-xl p-5 shadow-inner">
+          <h2 className="text-base font-bold text-gray-800 mb-4">Resolve Ticket</h2>
           <textarea
             value={resolutionText}
             onChange={(e) => setResolutionText(e.target.value)}
             placeholder="Enter resolution details..."
             rows={4}
-            className="w-full border rounded p-3"
+            className="w-full border border-gray-300 rounded-xl bg-white p-3 text-sm outline-none focus:border-green-500 transition-all"
           />
-
           <button
-            onClick={handleResolveTicket}
+            onClick={handleCreateResolution}
             disabled={submitting}
-            className="mt-4 bg-green-600 hover:bg-green-700 text-white px-5 py-2 rounded font-medium"
+            className="mt-4 bg-green-600 hover:bg-green-700 disabled:bg-gray-300 text-white font-bold px-5 py-2 rounded-xl transition-all shadow-sm text-sm"
           >
             {submitting ? "Resolving..." : "Submit Resolution"}
           </button>
