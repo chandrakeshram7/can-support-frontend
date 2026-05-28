@@ -1,33 +1,28 @@
 import { apiFetch } from "./api";
 
-export const queueApi = {
+export interface MoveTicketRequest {
+  fromQueueId: number;
+  toQueueId: number;
+  comment: string;
+}
 
+export const queueApi = {
   getQueueSummaries: async () => {
-    return apiFetch("/queues/summary");
+    return apiFetch<any[]>("/queues/summary");
   },
 
   getQueueDashboard: async (queueId: number) => {
-    return apiFetch(`/queues/${queueId}/dashboard`);
+    return apiFetch<any>(`/queues/${queueId}/dashboard`);
   },
 
-  moveTicket: async (
-    ticketId: number,
-    payload: {
-      fromQueueId: number;
-      toQueueId: number;
-      comment: string;
-    }
-  ) => {
+  moveTicket: async (ticketId: number, payload: MoveTicketRequest) => {
     return apiFetch(`/tickets/${ticketId}/move`, {
-      method: "POST",
+      method: "POST", // ✅ Matches your backend @PostMapping precisely
       body: JSON.stringify(payload),
     });
   },
 
-  addTicketsToQueue: async (
-    queueId: number,
-    payload: { ticketNumbers: string[] }
-  ) => {
+  addTicketsToQueue: async (queueId: number, payload: { ticketNumbers: string[] }) => {
     return apiFetch(`/queues/${queueId}/tickets/add`, {
       method: "POST",
       body: JSON.stringify(payload),

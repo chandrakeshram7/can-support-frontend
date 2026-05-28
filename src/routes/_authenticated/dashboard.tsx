@@ -78,6 +78,18 @@ function DashboardPage() {
     loadDashboardData();
   }, []);
 
+  // ✅ ADDED: USER INCLUSION SELECTION STATE MODIFIER
+  const handleAddUserView = (username: string) => {
+    if (username && !selectedUsers.includes(username)) {
+      setSelectedUsers((prev) => [...prev, username]);
+    }
+  };
+
+  // ✅ ADDED: USER DELETION SELECTION STATE MODIFIER
+  const handleRemoveUserView = (username: string) => {
+    setSelectedUsers((prev) => prev.filter((user) => user !== username));
+  };
+
   // Global Caseload Status Proportions
   const statusChartData = useMemo(() => {
     const counts: Record<string, number> = { OPEN: 0, ASSIGNED: 0, RESOLVED: 0, RE_OPENED: 0 };
@@ -128,9 +140,6 @@ function DashboardPage() {
     return { total, resolved, open, resolutionRate };
   }, [allTickets]);
 
-  // ---------------------------------------------------------
-  // CLEAN EXPORT HANDLERS FOR FULL TICKET BACKLOG DATA
-  // ---------------------------------------------------------
   const handleDownloadCSVReport = () => {
     let csvContent = "data:text/csv;charset=utf-8,";
     csvContent += "Ticket ID,Subject Title,Status,Assigned Agent,Customer Email\n";
@@ -252,7 +261,7 @@ function DashboardPage() {
           </div>
         </div>
 
-        {/* RECHARTS COLUMN BAR CHART */}
+        {/* BAR CHART */}
         <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm h-[380px] lg:col-span-2 flex flex-col page-break-inside-avoid">
           <h3 className="text-sm font-bold uppercase tracking-wider text-gray-700 mb-1">Global Volume Metrics</h3>
           <p className="text-xs text-gray-400 mb-4">Isolating target workload areas requiring response staff assignment actions.</p>

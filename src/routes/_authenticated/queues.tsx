@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { queueApi } from "../../lib/queue-api";
-import { ticketApi } from "../../lib/ticket-api";
+import { queueApi } from "../../lib/queue-api";   // ✅ Handles your queue definitions
+import { ticketApi } from "../../lib/ticket-api"; // ✅ Handles core ticket data structures
 
 export const Route = createFileRoute("/_authenticated/queues")({
   component: QueuesPage,
@@ -30,6 +30,7 @@ function QueuesPage() {
         const ticketsData = await ticketApi.getAll();
         setAllTickets(ticketsData || []);
 
+        // ✅ FIXED: Changed from ticketApi to queueApi to prevent TypeError crashes
         const queuesData = await queueApi.getQueueSummaries();
         setQueues(queuesData || []);
 
@@ -79,12 +80,12 @@ function QueuesPage() {
     }
   }
 
-  // ✅ Unified refresh mechanism updates lists concurrently without state collisions
   async function refreshDashboard() {
     try {
       const ticketsData = await ticketApi.getAll();
       setAllTickets(ticketsData || []);
 
+      // ✅ FIXED: Ensure this points to queueApi safely
       const queuesData = await queueApi.getQueueSummaries();
       setQueues(queuesData || []);
 
@@ -125,11 +126,11 @@ function QueuesPage() {
     const matches = allTickets
       .filter((ticket: any) => {
         const searchable = `
-          ${ticket.ticketNumber || ""}
-          ${ticket.subject || ""}
-          ${ticket.ticketTitle || ""}
-          ${ticket.customerMail || ""}
-          ${ticket.ticketStatus || ""}
+        ${ticket.ticketNumber || ""}
+        ${ticket.subject || ""}
+        ${ticket.ticketTitle || ""}
+        ${ticket.customerMail || ""}
+        ${ticket.ticketStatus || ""}
         `.toLowerCase();
 
         return (
@@ -181,7 +182,7 @@ function QueuesPage() {
     const targetTicketId = moveTicket.ticketId || moveTicket.id;
 
     if (!targetTicketId) {
-      showError("Unable to process move: Missing unique internal ticket identification tracking reference.");
+      showError("Unable to process move: Missing unique internal tracking reference.");
       return;
     }
 
@@ -189,13 +190,12 @@ function QueuesPage() {
       await queueApi.moveTicket(Number(targetTicketId), {
         fromQueueId: selectedQueue.queueId,
         toQueueId: Number(moveToQueueId),
-        comment: "Moved via support dashboard queue management workspace panel interface option selection",
+        comment: "Relocated via support dashboard queue management workspace panel interface.",
       });
 
       setMoveTicket(null);
       setMoveToQueueId("");
       
-      // ✅ FIXED REFERENCE HERE: Uses the proper sync pipeline refresh function
       await refreshDashboard();
       showSuccess("Ticket successfully moved to the destination queue.");
     } catch (err) {
@@ -276,12 +276,12 @@ function QueuesPage() {
   }, [selectedQueue, globalSearch]);
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
-      {successMessage && <div className="mb-4 rounded-xl bg-green-50 border border-green-200 px-4 py-3 text-green-700 shadow-sm">{successMessage}</div>}
-      {errorMessage && <div className="mb-4 rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-red-700 shadow-sm">{errorMessage}</div>}
+    <div className="min-h-screen bg-gray-50 p-6 font-sans">
+      {successMessage && <div className="mb-4 rounded-xl bg-green-50 border border-green-200 px-4 py-3 text-green-700 shadow-sm font-semibold text-sm animate-fade-in">{successMessage}</div>}
+      {errorMessage && <div className="mb-4 rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-red-700 shadow-sm font-semibold text-sm animate-fade-in">{errorMessage}</div>}
 
       <div className="flex gap-6">
-        {/* SIDEBAR */}
+        {/* SIDEBAR PANEL */}
         <div className="w-[300px] shrink-0">
           <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4 sticky top-6">
             <h2 className="text-xl font-bold text-gray-800 px-2 mb-4 tracking-tight">Support Queues</h2>
@@ -314,7 +314,7 @@ function QueuesPage() {
           </div>
         </div>
 
-        {/* WORKSPACE */}
+        {/* CORE WORKSPACE VIEW */}
         <div className="flex-1 min-w-0">
           {!selectedQueue ? (
             <div className="bg-white rounded-2xl border border-gray-200 p-12 text-center text-gray-400 font-medium shadow-sm">
@@ -322,7 +322,7 @@ function QueuesPage() {
             </div>
           ) : (
             <>
-              {/* SEARCH & BULK ENTRY BAR */}
+              {/* SEARCH & BULK ENTRY ACTION BAR */}
               <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 mb-5 flex flex-col gap-4">
                 <div className="flex flex-col lg:flex-row gap-3">
                   <div className="flex-1 relative">
@@ -347,9 +347,9 @@ function QueuesPage() {
                               setTicketNumbers(existing.join(", ") + (existing.length > 0 ? ", " : ""));
                               setFilteredTickets([]);
                             }}
-                            className="w-full text-left px-4 py-3 hover:bg-gray-50 border-b border-gray-100 transition-colors"
+                            className="w-full text-left px-4 py-3 hover:bg-gray-50 border-b border-gray-100 transition-colors text-sm font-medium"
                           >
-                            <div className="font-semibold text-gray-800 text-sm">{ticket.ticketNumber}</div>
+                            <div className="font-bold text-gray-800 text-sm">{ticket.ticketNumber}</div>
                             <div className="text-xs text-gray-400 mt-0.5 truncate">{ticket.subject || ticket.ticketTitle}</div>
                           </button>
                         ))}
@@ -360,7 +360,7 @@ function QueuesPage() {
                   <button
                     onClick={handleBulkAddTickets}
                     disabled={loading || !ticketNumbers.trim()}
-                    className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-200 disabled:text-gray-400 text-white px-6 py-3 rounded-xl font-semibold transition-all shadow-sm text-sm shrink-0"
+                    className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-100 disabled:text-gray-400 text-white px-6 py-3 rounded-xl font-bold transition-all shadow-sm text-sm shrink-0"
                   >
                     Add to Queue
                   </button>
@@ -377,18 +377,18 @@ function QueuesPage() {
                 </div>
               </div>
 
-              {/* TABLE LIST VIEW */}
+              {/* TABLE LIST ENVIRONMENT DIRECTORY */}
               <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
                 <div className="px-6 py-4 border-b border-gray-100 bg-gray-50/50 flex items-center justify-between">
                   <div>
                     <h3 className="text-lg font-bold text-gray-800">{selectedQueue.queueName} Overview</h3>
-                    <p className="text-xs text-gray-400 font-medium mt-0.5">Showing {filteredQueueTickets.length} active items</p>
+                    <p className="text-xs text-gray-400 font-semibold mt-0.5">Showing {filteredQueueTickets.length} active items</p>
                   </div>
                 </div>
 
                 <div className="overflow-x-auto">
                   <table className="w-full border-collapse text-left">
-                    <thead className="bg-gray-50 text-gray-500 uppercase text-[11px] font-bold tracking-wider border-b border-gray-100">
+                    <thead className="bg-gray-50 text-gray-400 uppercase text-[11px] font-bold tracking-wider border-b border-gray-100">
                       <tr>
                         <th className="p-4 pl-6">Ticket Details</th>
                         <th className="p-4">Status</th>
@@ -397,35 +397,35 @@ function QueuesPage() {
                       </tr>
                     </thead>
 
-                    <tbody className="divide-y divide-gray-100 text-sm">
+                    <tbody className="divide-y divide-gray-100 text-sm font-medium">
                       {filteredQueueTickets.length === 0 ? (
                         <tr>
-                          <td colSpan={4} className="p-8 text-center text-gray-400 font-medium bg-white">No tickets found matching your filter criteria.</td>
+                          <td colSpan={4} className="p-8 text-center text-gray-400 font-semibold bg-white">No tickets found matching your filter criteria.</td>
                         </tr>
                       ) : (
                         filteredQueueTickets.map((ticket: any) => {
                           const isResolvingThis = activeResolutionId === ticket.ticketNumber;
 
                           return (
-                            <tr key={ticket.ticketId || ticket.ticketNumber} className="hover:bg-gray-50/70 transition-colors">
+                            <tr key={ticket.ticketId || ticket.ticketNumber} className="hover:bg-gray-50/50 transition-colors">
                               <td className="p-4 pl-6 max-w-[340px]">
-                                <div className="font-semibold text-gray-800 text-[14px] truncate">{ticket.ticketTitle || ticket.subject}</div>
-                                <div className="flex gap-2 items-center mt-1 text-[12px] font-medium text-gray-500">
-                                  <span className="bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded text-[11px] font-semibold">ID</span>
+                                <div className="font-bold text-gray-900 text-[14px] truncate">{ticket.ticketTitle || ticket.subject}</div>
+                                <div className="flex gap-2 items-center mt-1 text-[12px] font-bold text-gray-400">
+                                  <span className="bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide">ID</span>
                                   {ticket.ticketNumber || "Unassigned"}
                                 </div>
                                 {ticket.customerMail && <div className="text-[12px] text-gray-400 truncate mt-0.5">{ticket.customerMail}</div>}
                               </td>
 
                               <td className="p-4">
-                                <span className={`inline-flex px-2.5 py-1 rounded-md text-[11px] font-bold tracking-wide uppercase ${
+                                <span className={`inline-flex px-2.5 py-1 rounded-md text-[11px] font-extrabold tracking-wide uppercase ${
                                   ticket.ticketStatus === "OPEN"
                                     ? "bg-amber-50 border border-amber-200 text-amber-700"
                                     : ticket.ticketStatus === "ASSIGNED"
-                                    ? "bg-blue-50 border border-blue-200 text-blue-700"
-                                    : ticket.ticketStatus === "RESOLVED"
-                                    ? "bg-emerald-50 border border-emerald-200 text-emerald-700"
-                                    : "bg-gray-50 border border-gray-200 text-gray-600"
+                                      ? "bg-blue-50 border border-blue-200 text-blue-700"
+                                      : ticket.ticketStatus === "RESOLVED"
+                                        ? "bg-emerald-50 border border-emerald-200 text-emerald-700"
+                                        : "bg-gray-50 border border-gray-200 text-gray-600"
                                 }`}>{ticket.ticketStatus}</span>
                               </td>
 
@@ -433,12 +433,12 @@ function QueuesPage() {
                                 {ticket.assignedTo || ticket.ticketStatus === "RESOLVED" ? (
                                   <div className="flex items-center gap-2">
                                     <div className={`w-2 h-2 rounded-full ${ticket.ticketStatus === "RESOLVED" ? "bg-emerald-500" : "bg-blue-500"}`} />
-                                    <div className="font-semibold text-gray-700 text-[13px]">{ticket.assignedTo || "Resolved"}</div>
+                                    <div className="font-bold text-gray-700 text-[13px]">{ticket.assignedTo || "Resolved"}</div>
                                   </div>
                                 ) : (
                                   <div className="flex gap-2 items-center">
                                     <select
-                                      className="border border-gray-300 rounded-lg px-2.5 py-1.5 bg-white text-xs font-medium text-gray-700 focus:border-blue-500 focus:outline-none"
+                                      className="border border-gray-300 rounded-lg px-2.5 py-1.5 bg-white text-xs font-semibold text-gray-700 focus:border-blue-500 focus:outline-none"
                                       value={assignments[ticket.ticketNumber] || ""}
                                       onChange={(e) => setAssignments((prev) => ({ ...prev, [ticket.ticketNumber]: Number(e.target.value) }))}
                                     >
@@ -451,7 +451,7 @@ function QueuesPage() {
                                     {(ticket.ticketStatus === "OPEN" || ticket.ticketStatus === "REOPEN" || ticket.ticketStatus === "RE_OPENED") && (
                                       <button
                                         onClick={() => handleAssignTicket(ticket)}
-                                        className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg text-xs font-semibold shadow-sm transition-colors"
+                                        className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow-sm transition-colors"
                                       >Assign</button>
                                     )}
                                   </div>
@@ -463,7 +463,7 @@ function QueuesPage() {
                                   <div className="inline-flex gap-1.5">
                                     <button
                                       onClick={() => handleMoveTicket(ticket)}
-                                      className="border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 px-3 py-1.5 rounded-lg text-xs font-semibold shadow-sm transition-all"
+                                      className="border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 px-3 py-1.5 rounded-lg text-xs font-bold shadow-sm transition-all"
                                     >Move</button>
 
                                     {ticket.ticketStatus === "ASSIGNED" && !isResolvingThis && (
@@ -472,29 +472,29 @@ function QueuesPage() {
                                           setActiveResolutionId(ticket.ticketNumber);
                                           setResolutionText("");
                                         }}
-                                        className="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1.5 rounded-lg text-xs font-semibold shadow-sm transition-all"
+                                        className="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow-sm transition-all"
                                       >Resolve</button>
                                     )}
                                   </div>
 
                                   {isResolvingThis && (
-                                    <div className="mt-2 text-left bg-gray-50 border rounded-xl p-3 shadow-inner w-[280px]">
-                                      <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1">Enter Closing Details</label>
+                                    <div className="mt-2 text-left bg-gray-50 border border-gray-200 rounded-xl p-3 shadow-inner w-[280px]">
+                                      <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-1">Enter Closing Details</label>
                                       <textarea
                                         value={resolutionText}
                                         onChange={(e) => setResolutionText(e.target.value)}
                                         placeholder="Provide details on how the issue was solved..."
                                         rows={2}
-                                        className="w-full border rounded-lg p-2 text-xs focus:outline-none focus:border-purple-500 bg-white"
+                                        className="w-full border border-gray-300 rounded-lg p-2 text-xs focus:outline-none focus:border-purple-500 bg-white font-medium resize-none"
                                       />
                                       <div className="flex justify-end gap-1.5 mt-2">
                                         <button
                                           onClick={() => setActiveResolutionId(null)}
-                                          className="px-2.5 py-1 text-xs font-semibold text-gray-500 hover:bg-gray-200 rounded"
+                                          className="px-2.5 py-1 text-xs font-bold text-gray-500 hover:bg-gray-200 rounded transition-colors"
                                         >Cancel</button>
                                         <button
                                           onClick={() => submitTicketResolution(ticket.ticketNumber)}
-                                          className="px-2.5 py-1 text-xs font-semibold text-white bg-purple-600 hover:bg-purple-700 rounded shadow-sm"
+                                          className="px-2.5 py-1 text-xs font-bold text-white bg-purple-600 hover:bg-purple-700 rounded shadow-sm transition-all"
                                         >Submit</button>
                                       </div>
                                     </div>
@@ -514,19 +514,19 @@ function QueuesPage() {
         </div>
       </div>
 
-      {/* MOVE MODAL */}
+      {/* OVERLAY POPUP TRANSACTION MOVE MODAL */}
       {moveTicket && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-white rounded-2xl p-6 w-[420px] shadow-2xl border border-gray-100">
-            <h4 className="text-lg font-bold text-gray-900 mb-2">Relocate Support Ticket</h4>
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl p-6 w-[420px] shadow-2xl border border-gray-100 animate-in fade-in zoom-in-95 duration-150">
+            <h4 className="text-lg font-extrabold text-gray-900 tracking-tight mb-2">Relocate Support Ticket</h4>
             <div className="mb-4 bg-gray-50 border border-gray-200 rounded-xl p-3">
               <label className="text-[11px] font-bold uppercase text-gray-400 tracking-wider block">Ticket Subject</label>
-              <div className="font-semibold text-gray-800 text-sm truncate mt-0.5">{moveTicket.ticketTitle || moveTicket.subject}</div>
-              <div className="text-xs text-gray-500 font-mono mt-0.5">{moveTicket.ticketNumber || "No ID Reference"}</div>
+              <div className="font-bold text-gray-800 text-sm truncate mt-0.5">{moveTicket.ticketTitle || moveTicket.subject}</div>
+              <div className="text-xs text-gray-400 font-bold font-mono mt-0.5">{moveTicket.ticketNumber || "No ID Reference"}</div>
             </div>
 
             <select
-              className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm mb-5 bg-white focus:outline-none focus:border-blue-500"
+              className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm mb-5 bg-white focus:outline-none focus:border-blue-500 font-medium"
               value={moveToQueueId}
               onChange={(e) => setMoveToQueueId(Number(e.target.value))}
             >
@@ -539,12 +539,12 @@ function QueuesPage() {
             <div className="flex justify-end gap-2.5">
               <button
                 onClick={() => { setMoveTicket(null); setMoveToQueueId(""); }}
-                className="border border-gray-300 text-gray-700 px-4 py-2 rounded-xl text-xs font-semibold hover:bg-gray-50 transition-colors"
+                className="border border-gray-300 text-gray-700 px-4 py-2 rounded-xl text-xs font-bold hover:bg-gray-50 transition-colors"
               >Cancel</button>
               <button
                 onClick={confirmMoveTicket}
                 disabled={!moveToQueueId}
-                className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-200 disabled:text-gray-400 text-white px-4 py-2 rounded-xl text-xs font-semibold transition-all shadow-sm"
+                className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-100 disabled:text-gray-400 text-white px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-sm"
               >Confirm Move</button>
             </div>
           </div>

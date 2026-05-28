@@ -1,6 +1,15 @@
 import { apiFetch } from "./api";
 
-// ✅ ADDED: Attachment Metadata Interfaces
+// ✅ ADDED: Queue Movement Payload Model Definition
+export interface QueueMovement {
+  id: number;
+  fromQueueName: string;
+  toQueueName: string;
+  movedByUsername: string;
+  comment: string;
+  movedAt: string;
+}
+
 export interface Attachment {
   id: number;
   fileName: string;
@@ -8,12 +17,12 @@ export interface Attachment {
 }
 
 export interface TicketConversation {
-  id?: number; // Added to act as explicit element keys
+  id?: number; 
   sender: string;
   message: string;
   createdAt: string;
-  direction?: "INBOUND" | "OUTBOUND"; // Maps message flow context
-  attachments?: Attachment[]; // ✅ Mapped files sent during subsequent email replies
+  direction?: "INBOUND" | "OUTBOUND"; 
+  attachments?: Attachment[]; 
 }
 
 export interface UserDropdown {
@@ -45,7 +54,10 @@ export interface Ticket {
     role: string;
   } | null;
   conversations?: TicketConversation[];
-  attachments?: Attachment[]; // ✅ Mapped files sent during initial ticket creation
+  attachments?: Attachment[]; 
+  
+  // ✅ ADDED: Embeds the audit trail array property cleanly
+  queueMovements?: QueueMovement[]; 
 }
 
 export const ticketApi = {

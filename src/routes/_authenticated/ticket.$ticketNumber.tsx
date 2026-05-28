@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
-import { ChevronDown, ChevronRight, CheckCircle2, AlertCircle, Paperclip, Download } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { ChevronDown, ChevronRight, CheckCircle2, AlertCircle, Paperclip, Download, ArrowRightLeft } from "lucide-react";
 
 import { ticketApi, Ticket, UserDropdown, ProjectDropdown } from "@/lib/ticket-api";
 
@@ -10,7 +10,7 @@ export const Route = createFileRoute("/_authenticated/ticket/$ticketNumber")({
 
 function TicketDetailsPage() {
   const { ticketNumber } = Route.useParams();
-  const [ticket, setTicket] = useState<Ticket | null>(null);
+  const [ticket, setTicket] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   
   const currentHost = typeof window !== "undefined" ? window.location.hostname : "localhost";
@@ -51,6 +51,34 @@ function TicketDetailsPage() {
     }
   }, [uiMessage]);
 
+  // ✅ CHRONOLOGICAL PROGRESS DATA AGGREGATION
+  const unifiedTimeline = useMemo(() => {
+    if (!ticket) return [];
+    const items: any[] = [];
+
+    if (ticket.conversations) {
+      ticket.conversations.forEach((c: any) => {
+        items.push({
+          ...c,
+          timelineType: "CONVERSATION",
+          sortDate: new Date(c.createdAt).getTime(),
+        });
+      });
+    }
+
+    if (ticket.queueMovements) {
+      ticket.queueMovements.forEach((m: any) => {
+        items.push({
+          ...m,
+          timelineType: "MOVEMENT",
+          sortDate: new Date(m.movedAt).getTime(),
+        });
+      });
+    }
+
+    return items.sort((a, b) => a.sortDate - b.sortDate);
+  }, [ticket]);
+
   if (loading) {
     return <div className="flex items-center justify-center min-h-screen font-medium text-gray-500">Loading...</div>;
   }
@@ -59,10 +87,10 @@ function TicketDetailsPage() {
     return <div className="p-6 text-red-500 font-semibold">Ticket not found</div>;
   }
 
-  // ✅ AUTHENTICATED ATTACHMENT DOWNLOAD HANDLER
   const handleAuthenticatedDownload = async (fileId: number, fileName: string) => {
     try {
-      const response = await fetch(`http://${currentHost}:8080/api/attachments/download/${fileId}`, {
+      const downloadUrl = `http://${currentHost}:8080/api/attachments/download/${fileId}`;
+      const response = await fetch(downloadUrl, {
         method: "GET",
         headers: {
           "Authorization": `Bearer ${localStorage.getItem("accessToken")}`
@@ -73,18 +101,15 @@ function TicketDetailsPage() {
         throw new Error(`Download failed with status: ${response.status}`);
       }
 
-      // Convert response stream to memory binary blob object
       const blob = await response.blob();
       const blobUrl = window.URL.createObjectURL(blob);
 
-      // Create an internal virtual link anchor to trigger browser download engine
       const downloadAnchor = document.createElement("a");
       downloadAnchor.href = blobUrl;
       downloadAnchor.setAttribute("download", fileName);
       document.body.appendChild(downloadAnchor);
       downloadAnchor.click();
       
-      // Garbage collection cleanup
       downloadAnchor.remove();
       window.URL.revokeObjectURL(blobUrl);
     } catch (err) {
@@ -126,14 +151,14 @@ function TicketDetailsPage() {
           </span>
         </div>
 
-        {/* INITIAL ROOT ATTACHMENTS (FILES ATTACHED DURING TICKET CREATION) */}
+        {/* INITIAL ROOT ATTACHMENTS */}
         {ticket.attachments && ticket.attachments.length > 0 && (
           <div className="mt-4 p-4 bg-slate-50 rounded-xl border border-slate-200/60">
             <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2.5 flex items-center gap-1">
               <Paperclip size={14} /> Initial Mail Attachments ({ticket.attachments.length})
             </h3>
             <div className="flex flex-wrap gap-2">
-              {ticket.attachments.map((file) => (
+              {ticket.attachments.map((file: any) => (
                 <button
                   key={file.id}
                   onClick={() => handleAuthenticatedDownload(file.id, file.fileName)}
@@ -147,7 +172,7 @@ function TicketDetailsPage() {
           </div>
         )}
 
-        {/* META */}
+        {/* META PANEL */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mt-6 bg-gray-50/70 border border-gray-100 p-5 rounded-xl">
           <div>
             <p className="text-xs uppercase text-gray-400 font-bold tracking-wider">Customer Email</p>
@@ -167,7 +192,7 @@ function TicketDetailsPage() {
           </div>
         </div>
 
-        {/* ACTIONS BUTTONS GRID COMPONENT */}
+        {/* ACTIONS PANEL */}
         <TicketActionButtons
           ticket={ticket}
           onActionSuccess={(message, type) => {
@@ -183,25 +208,25 @@ function TicketDetailsPage() {
             <table className="w-full border-collapse">
               <thead className="bg-gray-50/70 text-gray-500 text-xs font-bold uppercase tracking-wider border-b border-gray-200">
                 <tr>
-                  <th className="text-left p-4">Sender</th>
+                  <th className="text-left p-4">Sender / Actor</th>
                   <th className="text-left p-4">Date</th>
                   <th className="text-left p-4">Preview</th>
                   <th className="text-left p-4 w-[120px]">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 text-sm">
-                {ticket.conversations?.length ? (
-                  ticket.conversations.map((convo, index) => (
-                    <HistoryRow 
+                {unifiedTimeline.length ? (
+                  unifiedTimeline.map((item, index) => (
+                    <TimelineRow 
                       key={index} 
-                      convo={convo} 
+                      item={item} 
                       onDownload={handleAuthenticatedDownload} 
                     />
                   ))
                 ) : (
                   <tr>
                     <td colSpan={4} className="p-8 text-center text-gray-400 font-medium">
-                      No conversation history found
+                      No conversation or queue routing actions logged yet.
                     </td>
                   </tr>
                 )}
@@ -215,20 +240,33 @@ function TicketDetailsPage() {
 }
 
 /* ========================================================= */
-/* HISTORY ROW COMPONENT */
+/* TIMELINE TABLE ROW WITH CONDITIONAL RENDERING */
 /* ========================================================= */
-function HistoryRow({ convo, onDownload }: { convo: any; onDownload: (id: number, name: string) => void }) {
+function TimelineRow({ item, onDownload }: { item: any; onDownload: (id: number, name: string) => void }) {
   const [expanded, setExpanded] = useState(false);
-  const hasAttachments = convo.attachments && convo.attachments.length > 0;
+  const isMovement = item.timelineType === "MOVEMENT";
+  const hasAttachments = item.attachments && item.attachments.length > 0;
 
   return (
     <>
-      <tr className="hover:bg-gray-50/60 transition-all group">
-        <td className="p-4 font-semibold text-blue-600 truncate max-w-[200px]">{convo.sender}</td>
-        <td className="p-4 text-xs text-gray-400 font-medium">{new Date(convo.createdAt).toLocaleString()}</td>
+      <tr className={`hover:bg-gray-50/60 transition-all group ${isMovement ? "bg-slate-50/40" : ""}`}>
+        <td className="p-4 font-semibold text-blue-600 truncate max-w-[200px]">
+          {isMovement ? `🔄 ${item.movedByUsername}` : item.sender}
+        </td>
+        <td className="p-4 text-xs text-gray-400 font-medium">
+          {new Date(item.sortDate).toLocaleString()}
+        </td>
         <td className="p-4 text-gray-600 max-w-[350px] truncate font-medium">
-          {hasAttachments && <span className="inline-block mr-1.5 text-xs text-slate-400" title="Contains files">📎</span>}
-          {convo.message || <span className="italic text-gray-300">Empty message body</span>}
+          {isMovement ? (
+            <span className="text-xs text-slate-500 font-semibold">
+              Queue Move: {item.fromQueueName} ➔ {item.toQueueName}
+            </span>
+          ) : (
+            <>
+              {hasAttachments && <span className="inline-block mr-1.5 text-xs text-slate-400">📎</span>}
+              {item.message || <span className="italic text-gray-300">Empty message body</span>}
+            </>
+          )}
         </td>
         <td className="p-4">
           <button
@@ -241,31 +279,47 @@ function HistoryRow({ convo, onDownload }: { convo: any; onDownload: (id: number
         </td>
       </tr>
 
+      {/* DETAILED COLLAPSIBLE ROW DRAWER */}
       {expanded && (
         <tr className="bg-slate-50/60 border-t border-b border-gray-200/50">
           <td colSpan={4} className="p-5">
-            <div className="whitespace-pre-wrap text-sm text-gray-700 leading-relaxed font-medium bg-white border border-gray-200 rounded-xl p-4 shadow-inner">
-              {convo.message}
-            </div>
+            {isMovement ? (
+              <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm space-y-2">
+                <div className="flex items-center gap-2 text-sm text-gray-700 font-medium">
+                  <ArrowRightLeft size={16} className="text-blue-500" />
+                  <span>Ticket re-routed from <strong>{item.fromQueueName}</strong> to <strong>{item.toQueueName}</strong> by <strong>{item.movedByUsername}</strong></span>
+                </div>
+                {item.comment && (
+                  <div className="text-xs bg-slate-50 text-gray-500 p-2.5 rounded-lg border italic">
+                    Comment: "{item.comment}"
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="whitespace-pre-wrap text-sm text-gray-700 leading-relaxed font-medium bg-white border border-gray-200 rounded-xl p-4 shadow-inner">
+                  {item.message}
+                </div>
 
-            {/* CONVERSATION REPLY INLINE ATTACHMENTS */}
-            {hasAttachments && (
-              <div className="mt-4 pt-3 border-t border-gray-200/60">
-                <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-2 flex items-center gap-1">
-                  <Paperclip size={12} /> Email Reply Attachments ({convo.attachments.length})
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {convo.attachments.map((file: any) => (
-                    <button
-                      key={file.id}
-                      onClick={() => onDownload(file.id, file.fileName)}
-                      className="flex items-center gap-2 px-3 py-1.5 bg-white hover:bg-blue-50 border border-gray-200 hover:border-blue-200 rounded-lg transition-all text-gray-700 hover:text-blue-600 text-xs font-semibold group shadow-sm text-left"
-                    >
-                      <Download size={11} className="text-gray-400 group-hover:text-blue-500 transition-colors" />
-                      <span className="truncate max-w-[150px] underline">{file.fileName}</span>
-                    </button>
-                  ))}
-                </div>
+                {hasAttachments && (
+                  <div className="mt-4 pt-3 border-t border-gray-200/60">
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-2 flex items-center gap-1">
+                      <Paperclip size={12} /> Email Reply Attachments ({item.attachments.length})
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {item.attachments.map((file: any) => (
+                        <button
+                          key={file.id}
+                          onClick={() => onDownload(file.id, file.fileName)}
+                          className="flex items-center gap-2 px-3 py-1.5 bg-white hover:bg-blue-50 border border-gray-200 hover:border-blue-200 rounded-lg transition-all text-gray-700 hover:text-blue-600 text-xs font-semibold shadow-sm text-left"
+                        >
+                          <Download size={11} className="text-gray-400" />
+                          <span className="truncate max-w-[150px] underline">{file.fileName}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </td>
@@ -276,19 +330,20 @@ function HistoryRow({ convo, onDownload }: { convo: any; onDownload: (id: number
 }
 
 /* ========================================================= */
-/* ACTION BUTTONS COMPONENT */
+/* ACTION PANEL COMPONENT SECTION (REROUTE SECTION REMOVED) */
 /* ========================================================= */
 function TicketActionButtons({
   ticket,
   onActionSuccess,
 }: {
-  ticket: Ticket;
+  ticket: any;
   onActionSuccess: (message: string, type: "success" | "error") => void;
 }) {
   const [submitting, setSubmitting] = useState(false);
   const [resolutionText, setResolutionText] = useState("");
   const [memberId, setMemberId] = useState("");
   const [projectId, setProjectId] = useState("");
+
   const [users, setUsers] = useState<UserDropdown[]>([]);
   const [projects, setProjects] = useState<ProjectDropdown[]>([]);
 
@@ -296,25 +351,16 @@ function TicketActionButtons({
     loadDropdownData();
   }, []);
 
-  // ✅ SAFELY PARTITIONED DROPDOWN EXECUTIONS
   const loadDropdownData = async () => {
     try {
-      try {
-        const usersResponse = await ticketApi.getAllUsers();
-        setUsers(usersResponse || []);
-      } catch (uErr) {
-        console.error("Failed to fetch user roles matrix dropdown:", uErr);
-      }
-
-      try {
-        const projectsResponse = await ticketApi.getAllProjects();
-        setProjects(projectsResponse || []);
-      } catch (pErr) {
-        console.error("Access Denied on projects dropdown retrieval:", pErr);
-        setProjects([]); // Fallback array ensures view initialization continues safely
-      }
+      const [usersResponse, projectsResponse] = await Promise.all([
+        ticketApi.getAllUsers(),
+        ticketApi.getAllProjects()
+      ]);
+      setUsers(usersResponse || []);
+      setProjects(projectsResponse || []);
     } catch (e) {
-      console.error("General error during drop-down listing parsing:", e);
+      console.error(e);
     }
   };
 
