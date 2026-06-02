@@ -5,7 +5,7 @@ const currentHost =
 
 const BASE_URL =
   import.meta.env.VITE_API_BASE_URL ??
-  `http://${currentHost}:8080`;
+  `http://localhost:8080`;
 
 const ACCESS_KEY = "accessToken";
 const REFRESH_KEY = "refreshToken";
