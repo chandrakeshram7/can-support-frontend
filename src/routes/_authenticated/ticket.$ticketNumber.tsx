@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { ChevronDown, ChevronRight, CheckCircle2, AlertCircle, Paperclip, Download, ArrowRightLeft } from "lucide-react";
 
-import { ticketApi, Ticket, UserDropdown, ProjectDropdown } from "@/lib/ticket-api";
+import { ticketApi, UserDropdown, ProjectDropdown } from "@/lib/ticket-api";
 
 export const Route = createFileRoute("/_authenticated/ticket/$ticketNumber")({
   component: TicketDetailsPage,
@@ -12,8 +12,6 @@ function TicketDetailsPage() {
   const { ticketNumber } = Route.useParams();
   const [ticket, setTicket] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  
-  const currentHost = typeof window !== "undefined" ? window.location.hostname : "localhost";
 
   /* SUCCESS / ERROR UI MESSAGE */
   const [uiMessage, setUiMessage] = useState<{
@@ -29,6 +27,7 @@ function TicketDetailsPage() {
 
   const loadTicket = async (id: string) => {
     try {
+      setTicket(null);
       setLoading(true);
       const response = await ticketApi.getTicketInfo(id);
       const ticketData = response.data ? response.data : response;
@@ -87,37 +86,6 @@ function TicketDetailsPage() {
     return <div className="p-6 text-red-500 font-semibold">Ticket not found</div>;
   }
 
-  const handleAuthenticatedDownload = async (fileId: number, fileName: string) => {
-    try {
-      const downloadUrl = `http://${currentHost}:8080/api/attachments/download/${fileId}`;
-      const response = await fetch(downloadUrl, {
-        method: "GET",
-        headers: {
-          "Authorization": `Bearer ${localStorage.getItem("accessToken")}`
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error(`Download failed with status: ${response.status}`);
-      }
-
-      const blob = await response.blob();
-      const blobUrl = window.URL.createObjectURL(blob);
-
-      const downloadAnchor = document.createElement("a");
-      downloadAnchor.href = blobUrl;
-      downloadAnchor.setAttribute("download", fileName);
-      document.body.appendChild(downloadAnchor);
-      downloadAnchor.click();
-      
-      downloadAnchor.remove();
-      window.URL.revokeObjectURL(blobUrl);
-    } catch (err) {
-      console.error("Failed to fetch attachment stream securely:", err);
-      setUiMessage({ type: "error", text: "Secure file download failed." });
-    }
-  };
-
   return (
     <div className="p-6 bg-gray-100 min-h-screen font-sans">
       {/* TOP UI ALERT */}
@@ -151,7 +119,7 @@ function TicketDetailsPage() {
           </span>
         </div>
 
-        {/* INITIAL ROOT ATTACHMENTS */}
+        {/* ✅ FIXED: INITIAL ROOT ATTACHMENTS LINKED SECURELY TO CLOUDINARY VIA HTTPS */}
         {ticket.attachments && ticket.attachments.length > 0 && (
           <div className="mt-4 p-4 bg-slate-50 rounded-xl border border-slate-200/60">
             <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2.5 flex items-center gap-1">
@@ -159,14 +127,16 @@ function TicketDetailsPage() {
             </h3>
             <div className="flex flex-wrap gap-2">
               {ticket.attachments.map((file: any) => (
-                <button
+                <a
                   key={file.id}
-                  onClick={() => handleAuthenticatedDownload(file.id, file.fileName)}
+                  href={file.storagePath}
+                  target="_blank"
+                  rel="noopener noreferrer"
                   className="flex items-center gap-2 px-3 py-2 bg-white hover:bg-blue-50/50 border border-gray-200 hover:border-blue-300 rounded-xl transition-all text-gray-700 hover:text-blue-600 text-xs font-semibold group shadow-sm text-left"
                 >
                   <Download size={12} className="text-gray-400 group-hover:text-blue-500 transition-colors" />
                   <span className="truncate max-w-[220px]">{file.fileName}</span>
-                </button>
+                </a>
               ))}
             </div>
           </div>
@@ -220,7 +190,6 @@ function TicketDetailsPage() {
                     <TimelineRow 
                       key={index} 
                       item={item} 
-                      onDownload={handleAuthenticatedDownload} 
                     />
                   ))
                 ) : (
@@ -242,7 +211,7 @@ function TicketDetailsPage() {
 /* ========================================================= */
 /* TIMELINE TABLE ROW WITH CONDITIONAL RENDERING */
 /* ========================================================= */
-function TimelineRow({ item, onDownload }: { item: any; onDownload: (id: number, name: string) => void }) {
+function TimelineRow({ item }: { item: any }) {
   const [expanded, setExpanded] = useState(false);
   const isMovement = item.timelineType === "MOVEMENT";
   const hasAttachments = item.attachments && item.attachments.length > 0;
@@ -301,6 +270,7 @@ function TimelineRow({ item, onDownload }: { item: any; onDownload: (id: number,
                   {item.message}
                 </div>
 
+                {/* ✅ FIXED: CONVERSATION REPLY ATTACHMENTS EXTRACTED DIRECTLY FROM STORAGEPATH */}
                 {hasAttachments && (
                   <div className="mt-4 pt-3 border-t border-gray-200/60">
                     <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-2 flex items-center gap-1">
@@ -308,14 +278,16 @@ function TimelineRow({ item, onDownload }: { item: any; onDownload: (id: number,
                     </div>
                     <div className="flex flex-wrap gap-2">
                       {item.attachments.map((file: any) => (
-                        <button
+                        <a
                           key={file.id}
-                          onClick={() => onDownload(file.id, file.fileName)}
+                          href={file.storagePath}
+                          target="_blank"
+                          rel="noopener noreferrer"
                           className="flex items-center gap-2 px-3 py-1.5 bg-white hover:bg-blue-50 border border-gray-200 hover:border-blue-200 rounded-lg transition-all text-gray-700 hover:text-blue-600 text-xs font-semibold shadow-sm text-left"
                         >
                           <Download size={11} className="text-gray-400" />
                           <span className="truncate max-w-[150px] underline">{file.fileName}</span>
-                        </button>
+                        </a>
                       ))}
                     </div>
                   </div>
@@ -330,7 +302,7 @@ function TimelineRow({ item, onDownload }: { item: any; onDownload: (id: number,
 }
 
 /* ========================================================= */
-/* ACTION PANEL COMPONENT SECTION (REROUTE SECTION REMOVED) */
+/* ACTION PANEL COMPONENT SECTION */
 /* ========================================================= */
 function TicketActionButtons({
   ticket,
