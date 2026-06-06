@@ -6,6 +6,11 @@ export interface MoveTicketRequest {
   comment: string;
 }
 
+export interface CreateQueueRequest {
+  name: string;
+  description: string;
+}
+
 export const queueApi = {
   getQueueSummaries: async () => {
     return apiFetch<any[]>("/queues/summary");
@@ -17,7 +22,7 @@ export const queueApi = {
 
   moveTicket: async (ticketId: number, payload: MoveTicketRequest) => {
     return apiFetch(`/tickets/${ticketId}/move`, {
-      method: "POST", // ✅ Matches your backend @PostMapping precisely
+      method: "POST", 
       body: JSON.stringify(payload),
     });
   },
@@ -43,6 +48,21 @@ export const queueApi = {
         assignedMemberId: payload.assignedMemberId,
         projectId: payload.projectId,
       }),
+    });
+  },
+
+  // ✅ NEW: CREATE QUEUE ENDPOINT
+  createQueue: async (payload: CreateQueueRequest) => {
+    return apiFetch("/queues", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  // ✅ NEW: ADD MEMBER TO QUEUE ENDPOINT
+  addMemberToQueue: async (queueId: number, userId: number) => {
+    return apiFetch(`/queues/${queueId}/members/${userId}`, {
+      method: "POST",
     });
   },
 };

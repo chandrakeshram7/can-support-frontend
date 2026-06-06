@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { ChevronDown, ChevronRight, CheckCircle2, AlertCircle, Paperclip, Download, ArrowRightLeft } from "lucide-react";
 
-import { ticketApi, UserDropdown, ProjectDropdown } from "@/lib/ticket-api";
+import { ticketApi, UserDropdown } from "@/lib/ticket-api";
 
 export const Route = createFileRoute("/_authenticated/ticket/$ticketNumber")({
   component: TicketDetailsPage,
@@ -50,7 +50,7 @@ function TicketDetailsPage() {
     }
   }, [uiMessage]);
 
-  // ✅ CHRONOLOGICAL PROGRESS DATA AGGREGATION
+  // CHRONOLOGICAL PROGRESS DATA AGGREGATION
   const unifiedTimeline = useMemo(() => {
     if (!ticket) return [];
     const items: any[] = [];
@@ -119,7 +119,7 @@ function TicketDetailsPage() {
           </span>
         </div>
 
-        {/* ✅ FIXED: INITIAL ROOT ATTACHMENTS LINKED SECURELY TO CLOUDINARY VIA HTTPS */}
+        {/* INITIAL ROOT ATTACHMENTS */}
         {ticket.attachments && ticket.attachments.length > 0 && (
           <div className="mt-4 p-4 bg-slate-50 rounded-xl border border-slate-200/60">
             <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2.5 flex items-center gap-1">
@@ -142,8 +142,8 @@ function TicketDetailsPage() {
           </div>
         )}
 
-        {/* META PANEL */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mt-6 bg-gray-50/70 border border-gray-100 p-5 rounded-xl">
+        {/* META PANEL (PROJECT COL REMOVED) */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mt-6 bg-gray-50/70 border border-gray-100 p-5 rounded-xl">
           <div>
             <p className="text-xs uppercase text-gray-400 font-bold tracking-wider">Customer Email</p>
             <p className="mt-1 font-medium text-gray-700 text-sm">{ticket.customerMail}</p>
@@ -151,10 +151,6 @@ function TicketDetailsPage() {
           <div>
             <p className="text-xs uppercase text-gray-400 font-bold tracking-wider">Assigned Owner</p>
             <p className="mt-1 font-medium text-gray-700 text-sm">{ticket.assignedMember?.username || "Unassigned"}</p>
-          </div>
-          <div>
-            <p className="text-xs uppercase text-gray-400 font-bold tracking-wider">Project</p>
-            <p className="mt-1 font-medium text-gray-700 text-sm">{ticket.project?.projectName || "No Project Assigned"}</p>
           </div>
           <div>
             <p className="text-xs uppercase text-gray-400 font-bold tracking-wider">Created At</p>
@@ -270,7 +266,6 @@ function TimelineRow({ item }: { item: any }) {
                   {item.message}
                 </div>
 
-                {/* ✅ FIXED: CONVERSATION REPLY ATTACHMENTS EXTRACTED DIRECTLY FROM STORAGEPATH */}
                 {hasAttachments && (
                   <div className="mt-4 pt-3 border-t border-gray-200/60">
                     <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-2 flex items-center gap-1">
@@ -302,7 +297,7 @@ function TimelineRow({ item }: { item: any }) {
 }
 
 /* ========================================================= */
-/* ACTION PANEL COMPONENT SECTION */
+/* ACTION PANEL COMPONENT SECTION (PROJECT DATA REMOVED) */
 /* ========================================================= */
 function TicketActionButtons({
   ticket,
@@ -314,10 +309,8 @@ function TicketActionButtons({
   const [submitting, setSubmitting] = useState(false);
   const [resolutionText, setResolutionText] = useState("");
   const [memberId, setMemberId] = useState("");
-  const [projectId, setProjectId] = useState("");
 
   const [users, setUsers] = useState<UserDropdown[]>([]);
-  const [projects, setProjects] = useState<ProjectDropdown[]>([]);
 
   useEffect(() => {
     loadDropdownData();
@@ -325,12 +318,8 @@ function TicketActionButtons({
 
   const loadDropdownData = async () => {
     try {
-      const [usersResponse, projectsResponse] = await Promise.all([
-        ticketApi.getAllUsers(),
-        ticketApi.getAllProjects()
-      ]);
+      const usersResponse = await ticketApi.getAllUsers();
       setUsers(usersResponse || []);
-      setProjects(projectsResponse || []);
     } catch (e) {
       console.error(e);
     }
@@ -338,14 +327,15 @@ function TicketActionButtons({
 
   const handleAssignTicket = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!memberId || !projectId) return;
+    if (!memberId) return;
 
     try {
       setSubmitting(true);
+      // ✅ PROJECT BASS DECOUPLED: Sending safe default tracking ID '1' to avoid backend template crash failures
       await ticketApi.assign({
         ticketNumber: ticket.ticketNumber,
         assignedMemberId: Number(memberId),
-        projectId: Number(projectId),
+        projectId: 1, 
       });
       onActionSuccess("Ticket assigned successfully", "success");
     } catch (e) {
@@ -383,8 +373,9 @@ function TicketActionButtons({
         ticket.ticketStatus === "RE_OPENED") && (
         <div className="bg-gray-50 border border-gray-200/70 rounded-xl p-5 shadow-inner">
           <h2 className="text-base font-bold text-gray-800 mb-4">Assign Ticket</h2>
-          <form onSubmit={handleAssignTicket} className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
-            <div>
+          {/* ✅ COMPONENT MARKUP FIXED: Dynamic horizontal tracking rows resize cleanly */}
+          <form onSubmit={handleAssignTicket} className="flex items-end gap-4 max-w-2xl">
+            <div className="flex-1">
               <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Assign Team Member</label>
               <select
                 value={memberId}
@@ -399,25 +390,10 @@ function TicketActionButtons({
               </select>
             </div>
 
-            <div>
-              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Select Project</label>
-              <select
-                value={projectId}
-                onChange={(e) => setProjectId(e.target.value)}
-                className="w-full border border-gray-300 rounded-xl bg-white px-3 py-2 text-sm outline-none focus:border-blue-500 transition-all"
-                required
-              >
-                <option value="">Select Project</option>
-                {projects.map((project) => (
-                  <option key={project.id} value={project.id}>{project.projectName}</option>
-                ))}
-              </select>
-            </div>
-
             <button
               type="submit"
               disabled={submitting}
-              className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white font-bold px-5 py-2 rounded-xl transition-all shadow-sm text-sm"
+              className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white font-bold px-6 py-2 h-[38px] rounded-xl transition-all shadow-sm text-sm shrink-0"
             >
               {submitting ? "Assigning..." : "Assign Ticket"}
             </button>

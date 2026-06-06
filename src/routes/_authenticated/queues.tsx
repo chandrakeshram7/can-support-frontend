@@ -1,7 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { queueApi } from "../../lib/queue-api";   // ✅ Handles your queue definitions
-import { ticketApi } from "../../lib/ticket-api"; // ✅ Handles core ticket data structures
+import { PlusCircle, UserPlus, FolderPlus, Users, Search, Move, CheckCircle, RefreshCw } from "lucide-react";
+import { queueApi } from "../../lib/queue-api";   
+import { ticketApi } from "../../lib/ticket-api"; 
 
 export const Route = createFileRoute("/_authenticated/queues")({
   component: QueuesPage,
@@ -14,6 +15,7 @@ function QueuesPage() {
   const [assignments, setAssignments] = useState<Record<string, number>>({});
   const [filteredTickets, setFilteredTickets] = useState<any[]>([]);
   const [allTickets, setAllTickets] = useState<any[]>([]);
+  const [allUsers, setAllUsers] = useState<any[]>([]); // ✅ For membership dropdown
   const [loading, setLoading] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
@@ -24,13 +26,22 @@ function QueuesPage() {
   const [activeResolutionId, setActiveResolutionId] = useState<string | null>(null);
   const [resolutionText, setResolutionText] = useState("");
 
+  /* ✅ MODAL CONFIG STATE FOR NEW MANAGEMENT CONTROLS */
+  const [showCreateQueueModal, setShowCreateQueueModal] = useState(false);
+  const [newQueueName, setNewQueueName] = useState("");
+  const [newQueueDescription, setNewQueueDescription] = useState("");
+  const [selectedMemberToJoinId, setSelectedMemberToJoinId] = useState<number | "">("");
+
   useEffect(() => {
     async function initializeDashboard() {
       try {
         const ticketsData = await ticketApi.getAll();
         setAllTickets(ticketsData || []);
 
-        // ✅ FIXED: Changed from ticketApi to queueApi to prevent TypeError crashes
+        // Fetching all system users from dropdown profile registries to add members
+        const usersData = await ticketApi.getAllUsers();
+        setAllUsers(usersData || []);
+
         const queuesData = await queueApi.getQueueSummaries();
         setQueues(queuesData || []);
 
@@ -85,7 +96,6 @@ function QueuesPage() {
       const ticketsData = await ticketApi.getAll();
       setAllTickets(ticketsData || []);
 
-      // ✅ FIXED: Ensure this points to queueApi safely
       const queuesData = await queueApi.getQueueSummaries();
       setQueues(queuesData || []);
 
@@ -105,6 +115,56 @@ function QueuesPage() {
   function showError(message: string) {
     setErrorMessage(message);
     setTimeout(() => setErrorMessage(""), 3000);
+  }
+
+  /* ✅ SUBMIT CREATE QUEUE TO BACKEND SERVICE */
+  async function handleCreateQueue(e: React.FormEvent) {
+    e.preventDefault();
+    if (!newQueueName.trim()) return;
+
+    try {
+      setLoading(true);
+      const createdQueue = await queueApi.createQueue({
+        name: newQueueName.trim(),
+        description: newQueueDescription.trim(),
+      });
+
+      showSuccess(`Queue "${newQueueName}" created successfully!`);
+      setNewQueueName("");
+      setNewQueueDescription("");
+      setShowCreateQueueModal(false);
+      
+      // Reload summaries and focus on the newly made partition
+      const queuesData = await queueApi.getQueueSummaries();
+      setQueues(queuesData || []);
+      if (createdQueue?.id || createdQueue?.queueId) {
+        await loadQueueDashboardWithCache(createdQueue.id || createdQueue.queueId, allTickets);
+      }
+    } catch (err) {
+      console.error(err);
+      showError("Failed to build support queue partition. Name may be duplicated.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  /* ✅ SUBMIT ADD MEMBER ROUTING INTERACTION PROFILE */
+  async function handleAddMemberToQueue() {
+    if (!selectedQueue || !selectedMemberToJoinId) return;
+
+    try {
+      setLoading(true);
+      await queueApi.addMemberToQueue(selectedQueue.queueId, Number(selectedMemberToJoinId));
+      
+      showSuccess("Team member securely added to this queue workspace context.");
+      setSelectedMemberToJoinId("");
+      await refreshDashboard();
+    } catch (err) {
+      console.error(err);
+      showError("Could not attach member registry index to database.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   function handleTicketInput(value: string) {
@@ -281,8 +341,17 @@ function QueuesPage() {
       {errorMessage && <div className="mb-4 rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-red-700 shadow-sm font-semibold text-sm animate-fade-in">{errorMessage}</div>}
 
       <div className="flex gap-6">
-        {/* SIDEBAR PANEL */}
-        <div className="w-[300px] shrink-0">
+        {/* SIDEBAR PANEL WITH CREATE QUEUE INJECTION */}
+        <div className="w-[300px] shrink-0 space-y-4">
+          {/* ✅ BTN TO ACTIVATE MODAL ROW DICTIONARY */}
+          <button
+            onClick={() => setShowCreateQueueModal(true)}
+            className="w-full flex items-center justify-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 text-sm shadow-md shadow-blue-100 transition-all duration-150"
+          >
+            <FolderPlus size={16} />
+            Create Support Queue
+          </button>
+
           <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4 sticky top-6">
             <h2 className="text-xl font-bold text-gray-800 px-2 mb-4 tracking-tight">Support Queues</h2>
             <div className="space-y-1">
@@ -322,6 +391,57 @@ function QueuesPage() {
             </div>
           ) : (
             <>
+              {/* ✅ NEW COMPONENT ROW PANEL: MANAGE QUEUE MEMBERSHIP INLINE */}
+              <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 mb-5">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between border-b border-gray-100 pb-3 mb-4">
+                  <div>
+                    <h3 className="text-base font-bold text-gray-800 flex items-center gap-1.5">
+                      <Users size={18} className="text-blue-600" />
+                      Queue Members Directory
+                    </h3>
+                    <p className="text-xs text-gray-400 font-medium mt-0.5">Currently assigned operators inside this support partition branch profile.</p>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-4">
+                  {/* Selected queue member loop metrics tracking map lists tags */}
+                  <div className="flex flex-wrap gap-1.5 max-w-xl">
+                    {selectedQueue.members?.length === 0 ? (
+                      <span className="text-xs text-gray-400 font-medium italic p-1">No active members attached yet.</span>
+                    ) : (
+                      selectedQueue.members?.map((member: any) => (
+                        <span key={member.userId} className="inline-flex items-center text-xs bg-slate-100 border text-gray-700 font-semibold px-2.5 py-1 rounded-lg">
+                          {member.name}
+                        </span>
+                      ))
+                    )}
+                  </div>
+
+                  <div className="sm:ml-auto flex items-center gap-2">
+                    <select
+                      value={selectedMemberToJoinId}
+                      onChange={(e) => setSelectedMemberToJoinId(e.target.value)}
+                      className="border border-gray-300 rounded-xl px-3 py-2 text-xs font-semibold text-gray-700 bg-white focus:outline-none focus:border-blue-500"
+                    >
+                      <option value="">Select User Profile</option>
+                      {allUsers
+                        .filter(u => !selectedQueue.members?.some((m: any) => m.userId === u.id))
+                        .map(user => (
+                          <option key={user.id} value={user.id}>{user.username}</option>
+                        ))
+                      }
+                    </select>
+                    <button
+                      onClick={handleAddMemberToJoinId => handleAddMemberToQueue()}
+                      disabled={loading || !selectedMemberToJoinId}
+                      className="inline-flex items-center gap-1 bg-slate-800 hover:bg-slate-900 disabled:bg-gray-100 disabled:text-gray-400 text-white font-bold text-xs px-3 py-2 rounded-xl transition-all shadow-sm"
+                    >
+                      <UserPlus size={14} /> Add Member
+                    </button>
+                  </div>
+                </div>
+              </div>
+
               {/* SEARCH & BULK ENTRY ACTION BAR */}
               <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 mb-5 flex flex-col gap-4">
                 <div className="flex flex-col lg:flex-row gap-3">
@@ -548,6 +668,56 @@ function QueuesPage() {
               >Confirm Move</button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* ✅ NEW: OVERLAY CREATE QUEUE FORM MODAL */}
+      {showCreateQueueModal && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50">
+          <form onSubmit={handleCreateQueue} className="bg-white rounded-2xl p-6 w-[440px] shadow-2xl border border-gray-100 animate-in fade-in zoom-in-95 duration-150 space-y-4">
+            <div>
+              <h4 className="text-lg font-extrabold text-gray-900 tracking-tight">Create Support Queue Partition</h4>
+              <p className="text-xs text-gray-400 mt-0.5">Build a new dedicated support category channel bucket layout context.</p>
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">Queue Target Name</label>
+              <input
+                type="text"
+                value={newQueueName}
+                onChange={(e) => setNewQueueName(e.target.value)}
+                placeholder="e.g., L2 Core Infrastructure Backend, QA Queue..."
+                className="w-full rounded-xl border border-gray-300 px-4 py-2.5 text-sm outline-none focus:border-blue-500"
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">Description Summary</label>
+              <textarea
+                value={newQueueDescription}
+                onChange={(e) => setNewQueueDescription(e.target.value)}
+                placeholder="Provide short functional summaries for routing documentation details..."
+                rows={3}
+                className="w-full border border-gray-300 rounded-xl p-3 text-sm focus:outline-none focus:border-blue-500 font-medium resize-none"
+              />
+            </div>
+
+            <div className="flex justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => { setShowCreateQueueModal(false); setNewQueueName(""); setNewQueueDescription(""); }}
+                className="border border-gray-300 text-gray-700 px-4 py-2 rounded-xl text-xs font-bold hover:bg-gray-50 transition-colors"
+              >Cancel</button>
+              <button
+                type="submit"
+                disabled={loading || !newQueueName.trim()}
+                className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-100 disabled:text-gray-400 text-white px-5 py-2 rounded-xl text-xs font-bold transition-all shadow-sm"
+              >
+                {loading ? "Creating..." : "Build Queue Partition"}
+              </button>
+            </div>
+          </form>
         </div>
       )}
     </div>
