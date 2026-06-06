@@ -59,9 +59,19 @@ function ChatPage() {
   useEffect(() => {
     if (!currentUserId) return;
 
+    // ✅ FIX: Dynamically detect environment to establish a secure websocket handshake pathway context
     const currentHost = window.location.hostname;
+    const isLocal = currentHost === "localhost" || currentHost === "127.0.0.1";
+    
+    const socketUrl = isLocal
+      ? `http://${currentHost}:8080/ws`
+      : `https://can-support-backend.onrender.com/ws`; // 👈 Safely target your secure deployed REST server end-point
+
     const client = new Client({
-      webSocketFactory: () => new SockJS(`http://${currentHost}:8080/ws`),
+      webSocketFactory: () => new SockJS(socketUrl, null, {
+        // Enforces secure cross-origin transport mechanisms if standard fallback connections get dropped
+        transports: ['websocket', 'xhr-streaming', 'xhr-polling']
+      }),
       reconnectDelay: 3000, // Faster reconnect intervals for a smoother startup experience
       heartbeatIncoming: 10000,
       heartbeatOutgoing: 10000,
@@ -74,6 +84,11 @@ function ChatPage() {
       },
       onWebSocketError: () => setIsConnected(false),
     });
+
+    // Strip STOMP debug log messaging congestion when serving clients in production mode
+    if (!isLocal) {
+      client.debug = () => {};
+    }
 
     client.activate();
     stompClientRef.current = client;
@@ -196,7 +211,6 @@ function ChatPage() {
         <div className="p-5 border-b border-gray-100">
           <h1 className="text-2xl font-bold text-gray-800 tracking-tight">Messages</h1>
           <div className="mt-2 flex items-center gap-1.5 text-xs">
-            {/* ✅ USER-FRIENDLY LABEL: Replaced jargon with standard "Connected" status indicators */}
             <span className={`w-2 h-2 rounded-full ${isConnected ? "bg-emerald-500 animate-pulse" : "bg-amber-500"}`} />
             <span className={`font-semibold ${isConnected ? "text-emerald-600" : "text-amber-600"}`}>
               {isConnected ? "Connected" : "Connecting..."}
@@ -239,7 +253,6 @@ function ChatPage() {
               </div>
               <div>
                 <div className="font-bold text-gray-800 text-base">{selectedUser.username}</div>
-                {/* ✅ USER-FRIENDLY LABEL: Standardized header status badge to plain text */}
                 <div className="text-xs text-emerald-500 font-semibold flex items-center gap-1">
                   <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
                   Online
