@@ -13,10 +13,6 @@ export default function Sidebar() {
         <Link to="/tickets" className="block hover:underline">
           Tickets
         </Link>
-
-        <Link to="/projects" className="block hover:underline">
-          Projects
-        </Link>
         <Link to="/users" className="block hover:underline">
           Users
         </Link>

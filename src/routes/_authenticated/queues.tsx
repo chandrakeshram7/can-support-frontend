@@ -76,7 +76,6 @@ function QueuesPage() {
           ticketId: queueTicket.ticketId || fullTicket?.id || queueTicket.id,
           ticketNumber: queueTicket.ticketNumber || fullTicket?.ticketNumber || "",
           subject: queueTicket.subject || fullTicket?.subject || queueTicket.ticketTitle,
-          projectId: queueTicket.projectId || fullTicket?.project?.id || 1,
           customerMail: queueTicket.customerMail || fullTicket?.customerMail || "",
           createdBy: queueTicket.createdBy || fullTicket?.assignedMember?.username || "System"
         };
@@ -268,7 +267,6 @@ function QueuesPage() {
     try {
       const ticketNumber = ticket.ticketNumber;
       const assignedMemberId = assignments[ticket.ticketNumber];
-      const projectId = ticket.projectId || 1;
 
       if (!ticketNumber) {
         showError("Ticket information is incomplete.");
@@ -280,9 +278,10 @@ function QueuesPage() {
         return;
       }
 
+      // ✅ PROJECT BINDING REMOVED: Passing standard fallback ID '1' to support backward-compatible API contracts safely
       await queueApi.assignTicket(ticketNumber, {
         assignedMemberId,
-        projectId,
+        projectId: 1,
       });
 
       await refreshDashboard();
@@ -343,7 +342,6 @@ function QueuesPage() {
       <div className="flex gap-6">
         {/* SIDEBAR PANEL WITH CREATE QUEUE INJECTION */}
         <div className="w-[300px] shrink-0 space-y-4">
-          {/* ✅ BTN TO ACTIVATE MODAL ROW DICTIONARY */}
           <button
             onClick={() => setShowCreateQueueModal(true)}
             className="w-full flex items-center justify-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 text-sm shadow-md shadow-blue-100 transition-all duration-150"
@@ -391,7 +389,7 @@ function QueuesPage() {
             </div>
           ) : (
             <>
-              {/* ✅ NEW COMPONENT ROW PANEL: MANAGE QUEUE MEMBERSHIP INLINE */}
+              {/* NEW COMPONENT ROW PANEL: MANAGE QUEUE MEMBERSHIP INLINE */}
               <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 mb-5">
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between border-b border-gray-100 pb-3 mb-4">
                   <div>
@@ -404,7 +402,6 @@ function QueuesPage() {
                 </div>
 
                 <div className="flex flex-wrap items-center gap-4">
-                  {/* Selected queue member loop metrics tracking map lists tags */}
                   <div className="flex flex-wrap gap-1.5 max-w-xl">
                     {selectedQueue.members?.length === 0 ? (
                       <span className="text-xs text-gray-400 font-medium italic p-1">No active members attached yet.</span>
@@ -432,7 +429,7 @@ function QueuesPage() {
                       }
                     </select>
                     <button
-                      onClick={handleAddMemberToJoinId => handleAddMemberToQueue()}
+                      onClick={() => handleAddMemberToQueue()}
                       disabled={loading || !selectedMemberToJoinId}
                       className="inline-flex items-center gap-1 bg-slate-800 hover:bg-slate-900 disabled:bg-gray-100 disabled:text-gray-400 text-white font-bold text-xs px-3 py-2 rounded-xl transition-all shadow-sm"
                     >
@@ -549,6 +546,7 @@ function QueuesPage() {
                                 }`}>{ticket.ticketStatus}</span>
                               </td>
 
+                              {/* ✅ UPDATED COLUMN: DROPPED BOTH SELECT PROJECT PARAMETERS AND MARKUP LABELS CLEANLY */}
                               <td className="p-4">
                                 {ticket.assignedTo || ticket.ticketStatus === "RESOLVED" ? (
                                   <div className="flex items-center gap-2">
@@ -671,7 +669,7 @@ function QueuesPage() {
         </div>
       )}
 
-      {/* ✅ NEW: OVERLAY CREATE QUEUE FORM MODAL */}
+      {/* OVERLAY CREATE QUEUE FORM MODAL */}
       {showCreateQueueModal && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50">
           <form onSubmit={handleCreateQueue} className="bg-white rounded-2xl p-6 w-[440px] shadow-2xl border border-gray-100 animate-in fade-in zoom-in-95 duration-150 space-y-4">

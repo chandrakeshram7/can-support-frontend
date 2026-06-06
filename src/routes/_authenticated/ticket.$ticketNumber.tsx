@@ -297,7 +297,7 @@ function TimelineRow({ item }: { item: any }) {
 }
 
 /* ========================================================= */
-/* ACTION PANEL COMPONENT SECTION (PROJECT DATA REMOVED) */
+/* ACTION PANEL COMPONENT SECTION (PROJECT DROP-DOWN REMOVED) */
 /* ========================================================= */
 function TicketActionButtons({
   ticket,
@@ -331,7 +331,7 @@ function TicketActionButtons({
 
     try {
       setSubmitting(true);
-      // ✅ PROJECT BASS DECOUPLED: Sending safe default tracking ID '1' to avoid backend template crash failures
+      // Pass safe dummy project ID parameter ('1') behind the scenes to avoid breaking backend API contract schemas
       await ticketApi.assign({
         ticketNumber: ticket.ticketNumber,
         assignedMemberId: Number(memberId),
@@ -373,7 +373,6 @@ function TicketActionButtons({
         ticket.ticketStatus === "RE_OPENED") && (
         <div className="bg-gray-50 border border-gray-200/70 rounded-xl p-5 shadow-inner">
           <h2 className="text-base font-bold text-gray-800 mb-4">Assign Ticket</h2>
-          {/* ✅ COMPONENT MARKUP FIXED: Dynamic horizontal tracking rows resize cleanly */}
           <form onSubmit={handleAssignTicket} className="flex items-end gap-4 max-w-2xl">
             <div className="flex-1">
               <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Assign Team Member</label>

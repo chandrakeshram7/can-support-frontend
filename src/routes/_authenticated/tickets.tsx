@@ -37,6 +37,7 @@ function TicketsPage() {
   const [assignedFilter, setAssignedFilter] =
     useState("ALL");
 
+  // ✅ PRESERVED STABLE STATE: Project filter state kept active for logical array safety
   const [projectFilter, setProjectFilter] =
     useState("ALL");
 
@@ -162,6 +163,7 @@ function TicketsPage() {
     ),
   ];
 
+  // ✅ PRESERVED STABLE TRACKING: Keeps computing values for backend mapping stability
   const uniqueProjects = [
     ...new Set(
       allTickets
@@ -174,6 +176,7 @@ function TicketsPage() {
     ),
   ];
 
+  // ✅ PRESERVED STABLE Memo Filters: Logic loop remains exactly identical to yours
   const filteredTickets = useMemo(() => {
     return allTickets
       .filter((ticket) => {
@@ -337,7 +340,8 @@ function TicketsPage() {
           Advanced Filters
         </h2>
 
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+        {/* ✅ LOOK: Changed from md:grid-cols-5 to md:grid-cols-4 for perfect layout styling balance */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
 
           {/* SEARCH */}
 
@@ -412,32 +416,7 @@ function TicketsPage() {
             )}
           </select>
 
-          {/* PROJECT */}
-
-          <select
-            value={projectFilter}
-            onChange={(e) =>
-              setProjectFilter(
-                e.target.value
-              )
-            }
-            className="border border-gray-300 rounded-xl px-4 py-3"
-          >
-            <option value="ALL">
-              All Projects
-            </option>
-
-            {uniqueProjects.map(
-              (project) => (
-                <option
-                  key={project}
-                  value={project}
-                >
-                  {project}
-                </option>
-              )
-            )}
-          </select>
+          {/* PROJECT DROPDOWN ELEMENT REMOVED VISUALLY */}
 
           {/* SORT */}
 
@@ -580,14 +559,7 @@ function TicketsPage() {
                       "Unassigned"}
                   </p>
 
-                  <p>
-                    <strong>
-                      Project:
-                    </strong>{" "}
-                    {ticket.project
-                      ?.projectName ||
-                      "No Project"}
-                  </p>
+                  {/* PROJECT LINE REF SUMMARY REMOVED VISUALLY */}
 
                   <p>
                     <strong>
