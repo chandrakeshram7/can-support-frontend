@@ -4,6 +4,12 @@ import axios from "axios";
 
 import { authApi, tokenStore, type LoginRequest, type SignupRequest } from "./api";
 
+const BASE_URL =
+  import.meta.env.VITE_API_BASE_URL ??
+  "http://localhost:8080";
+
+
+
 interface JwtPayload {
   sub?: string;
   username?: string;
@@ -60,9 +66,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 }: LoginRequest) => {
 
   try {
+    console.log("MODE =", import.meta.env.MODE);
+    console.log("API URL =", import.meta.env.VITE_API_BASE_URL);
 
     const response = await axios.post(
-      "https://can-support-backend.onrender.com/auth/login",
+      `${BASE_URL}/auth/login`,
 
       {
         username,
