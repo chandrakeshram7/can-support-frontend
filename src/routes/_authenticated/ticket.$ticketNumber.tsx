@@ -206,6 +206,9 @@ function TicketDetailsPage() {
   );
 }
 
+/* ========================================================= */
+/* TIMELINE TABLE ROW WITH CONDITIONAL RENDERING */
+/* ========================================================= */
 function TimelineRow({ item }: { item: any }) {
   const [expanded, setExpanded] = useState(false);
   const isMovement = item.timelineType === "MOVEMENT";
@@ -295,6 +298,9 @@ function TimelineRow({ item }: { item: any }) {
   );
 }
 
+/* ========================================================= */
+/* ACTION PANEL COMPONENT SECTION WITH TEXT-ONLY THREAD REPLY */
+/* ========================================================= */
 function TicketActionButtons({
   ticket,
   onActionSuccess,
@@ -307,8 +313,6 @@ function TicketActionButtons({
   const [memberId, setMemberId] = useState("");
   
   const [replyText, setReplyText] = useState("");
-  const [uploadedFilesForReply, setUploadedFilesForReply] = useState<any[]>([]);
-
   const [users, setUsers] = useState<UserDropdown[]>([]);
 
   useEffect(() => {
@@ -363,47 +367,19 @@ function TicketActionButtons({
     }
   };
 
-  const handleReplyFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!e.target.files || e.target.files.length === 0) return;
-    try {
-      setSubmitting(true);
-      const filesArray = Array.from(e.target.files);
-      const uploadedResults = [];
-
-      for (const file of filesArray) {
-        const response = await ticketApi.uploadFileToCloudinary(file);
-        
-        uploadedResults.push({
-          fileName: file.name,
-          fileType: file.type,
-          storagePath: response.storagePath || response.url || response.data?.url,
-          createdAt: new Date().toISOString() 
-        });
-      }
-      setUploadedFilesForReply((prev) => [...prev, ...uploadedResults]);
-      onActionSuccess("Attachments securely buffered onto Cloudinary nodes.", "success");
-    } catch (err) {
-      console.error("Cloudinary upload failure:", err);
-      onActionSuccess("Could not successfully finalize file attachment streaming transfer.", "error");
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
   const handleSendAgentReply = async () => {
     if (!replyText.trim()) return;
     try {
       setSubmitting(true);
       
-      // ✅ SUCCESS: Hits the newly registered backend controller mapping endpoint cleanly
+      // ✅ SUCCESS: Dispatches direct clean string payload structure to the text-only endpoint
       await ticketApi.sendReply({
         ticketNumber: ticket.ticketNumber,
         replyMessage: replyText.trim(),
-        attachments: uploadedFilesForReply
+        attachments: [] // Safely satisfies the backend structure shape signature
       });
 
       setReplyText("");
-      setUploadedFilesForReply([]);
       onActionSuccess("Follow-up thread email message logged and dispatched.", "success");
     } catch (err) {
       console.error("Dispatched pipeline trace breakdown details:", err);
@@ -428,7 +404,8 @@ function TicketActionButtons({
               <select
                 value={memberId}
                 onChange={(e) => setMemberId(e.target.value)}
-                className="w-full border border-gray-300 rounded-xl bg-white px-3 py-2 text-sm outline-none focus:border-blue-500 transition-all"
+                disabled={submitting}
+                className="w-full border border-gray-300 rounded-xl bg-white px-3 py-2 text-sm outline-none focus:border-blue-500 transition-all disabled:bg-gray-100 disabled:text-gray-400"
                 required
               >
                 <option value="">Select Team Member</option>
@@ -449,7 +426,7 @@ function TicketActionButtons({
         </div>
       )}
 
-      {/* THREADED RE-REPLY BOX */}
+      {/* ✅ CLEAN TEXT-ONLY RE-REPLY BOX FOR EMAIL TREES */}
       {(ticket.ticketStatus === "ASSIGNED" || ticket.ticketStatus === "IN_PROGRESS") && (
         <div className="bg-gray-50 border border-gray-200/70 rounded-xl p-5 shadow-inner">
           <div className="mb-3">
@@ -465,31 +442,13 @@ function TicketActionButtons({
           <textarea
             value={replyText}
             onChange={(e) => setReplyText(e.target.value)}
-            placeholder="Provide clarity instructions or ask customer for explicit trace files..."
+            disabled={submitting}
+            placeholder="Provide clarity instructions or details directly to the customer inbox..."
             rows={4}
-            className="w-full border border-gray-300 rounded-xl bg-white p-3 text-sm outline-none focus:border-blue-500 transition-all font-medium"
+            className="w-full border border-gray-300 rounded-xl bg-white p-3 text-sm outline-none focus:border-blue-500 transition-all font-medium disabled:bg-gray-50 disabled:text-gray-400"
           />
 
-          {uploadedFilesForReply.length > 0 && (
-            <div className="mt-3 flex flex-wrap gap-1.5">
-              {uploadedFilesForReply.map((file, idx) => (
-                <div key={idx} className="inline-flex items-center gap-1 bg-blue-50 border border-blue-200 text-blue-700 text-xs font-bold px-2.5 py-1 rounded-lg">
-                  <Paperclip size={11} />
-                  <span className="truncate max-w-[180px]">{file.fileName}</span>
-                </div>
-              ))}
-            </div>
-          )}
-
-          <div className="mt-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <input
-              type="file"
-              multiple
-              onChange={handleReplyFileUpload}
-              disabled={submitting}
-              className="text-xs font-semibold text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-slate-200/70 file:text-gray-700 hover:file:bg-slate-200 cursor-pointer"
-            />
-            
+          <div className="mt-4 flex justify-end">
             <button
               onClick={handleSendAgentReply}
               disabled={submitting || !replyText.trim()}
@@ -508,13 +467,14 @@ function TicketActionButtons({
           <textarea
             value={resolutionText}
             onChange={(e) => setResolutionText(e.target.value)}
+            disabled={submitting}
             placeholder="Enter resolution details..."
             rows={4}
-            className="w-full border border-gray-300 rounded-xl bg-white p-3 text-sm outline-none focus:border-green-500 transition-all"
+            className="w-full border border-gray-300 rounded-xl bg-white p-3 text-sm outline-none focus:border-green-500 transition-all disabled:bg-gray-100 disabled:text-gray-400"
           />
           <button
             onClick={handleCreateResolution}
-            disabled={submitting}
+            disabled={submitting || !resolutionText.trim()}
             className="mt-4 bg-green-600 hover:bg-green-700 disabled:bg-gray-300 text-white font-bold px-5 py-2 rounded-xl transition-all shadow-sm text-sm"
           >
             {submitting ? "Resolving..." : "Submit Resolution"}

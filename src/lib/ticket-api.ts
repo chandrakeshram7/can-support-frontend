@@ -1,6 +1,6 @@
 import { apiFetch } from "./api";
 
-// ✅ ADDED: Queue Movement Payload Model Definition
+// ✅ PRESERVED MODEL DEFINITIONS COPIED VERBATIM
 export interface QueueMovement {
   id: number;
   fromQueueName: string;
@@ -14,6 +14,8 @@ export interface Attachment {
   id: number;
   fileName: string;
   fileType: string;
+  storagePath: string;
+  createdAt?: string;
 }
 
 export interface TicketConversation {
@@ -55,8 +57,6 @@ export interface Ticket {
   } | null;
   conversations?: TicketConversation[];
   attachments?: Attachment[]; 
-  
-  // ✅ ADDED: Embeds the audit trail array property cleanly
   queueMovements?: QueueMovement[]; 
 }
 
@@ -120,25 +120,48 @@ export const ticketApi = {
     return response?.data;
   },
 
-  // ✅ FIXED: EXPOSED UI REPLY ROUTE TARGET ENDPOINT CONTRACT
   sendReply: async (payload: {
     ticketNumber: string;
     replyMessage: string;
     attachments: any[];
   }): Promise<any> => {
     return apiFetch("/tickets/reply", {
-      method: "POST", // Matches your java @PostMapping backend endpoint signature precisely
+      method: "POST",
       body: JSON.stringify(payload),
     });
   },
 
-  // Added Cloudinary binary processing node endpoint mapping configuration wrapper
+  // ✅ FIXED IMPLEMENTATION: Direct window.fetch bypass to protect multipart stream form-data boundaries from api.ts interception
+  // ✅ FIX: Bypasses apiFetch completely to prevent token stripping or header mismatches
   uploadFileToCloudinary: async (file: File): Promise<any> => {
     const formData = new FormData();
     formData.append("file", file);
-    return apiFetch("/attachments/upload", {
+
+    const token = localStorage.getItem("accessToken");
+    
+    // Resolve base url manually matching your api.ts setup
+    const isLocal = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
+    const BASE_URL = isLocal ? "http://localhost:8080" : "https://can-support-backend.onrender.com";
+
+    // Call window.fetch directly so apiFetch doesn't alter your headers
+    const response = await window.fetch(`${BASE_URL}/attachments/upload`, {
       method: "POST",
-      body: formData, // Framework content-type multi-part header is set dynamically by the browser
+      body: formData,
+      headers: token ? {
+        "Authorization": `Bearer ${token}`
+        // CRITICAL: DO NOT add "Content-Type" here. 
+        // Let the browser set the multi-part boundary string automatically.
+      } : {}
     });
+
+    if (!response.ok) {
+      const errorJson = await response.json().catch(() => ({}));
+      throw new Error(errorJson?.apiError?.message || errorJson?.message || `Upload failed: ${response.status}`);
+    }
+
+    const dataPayload = await response.json();
+    
+    // Return data nested matching your components structural expectations pattern
+    return dataPayload?.data ? dataPayload.data : dataPayload;
   }
 };
