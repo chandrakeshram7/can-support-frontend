@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { ChevronDown, ChevronRight, CheckCircle2, AlertCircle, Paperclip, Download, ArrowRightLeft } from "lucide-react";
+import { ChevronDown, ChevronRight, CheckCircle2, AlertCircle, Paperclip, Download, ArrowRightLeft, Send } from "lucide-react";
 
 import { ticketApi, UserDropdown } from "@/lib/ticket-api";
 
@@ -111,9 +111,11 @@ function TicketDetailsPage() {
               ? "bg-yellow-100 text-yellow-700"
               : ticket.ticketStatus === "ASSIGNED"
                 ? "bg-blue-100 text-blue-700"
-                : ticket.ticketStatus === "RESOLVED"
-                  ? "bg-green-100 text-green-700"
-                  : "bg-gray-100 text-gray-700"
+                : ticket.ticketStatus === "IN_PROGRESS"
+                  ? "bg-indigo-100 text-indigo-700" 
+                  : ticket.ticketStatus === "RESOLVED"
+                    ? "bg-green-100 text-green-700"
+                    : "bg-gray-100 text-gray-700"
           }`}>
             {ticket.ticketStatus}
           </span>
@@ -142,7 +144,7 @@ function TicketDetailsPage() {
           </div>
         )}
 
-        {/* META PANEL (PROJECT COL REMOVED) */}
+        {/* META PANEL */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mt-6 bg-gray-50/70 border border-gray-100 p-5 rounded-xl">
           <div>
             <p className="text-xs uppercase text-gray-400 font-bold tracking-wider">Customer Email</p>
@@ -204,9 +206,6 @@ function TicketDetailsPage() {
   );
 }
 
-/* ========================================================= */
-/* TIMELINE TABLE ROW WITH CONDITIONAL RENDERING */
-/* ========================================================= */
 function TimelineRow({ item }: { item: any }) {
   const [expanded, setExpanded] = useState(false);
   const isMovement = item.timelineType === "MOVEMENT";
@@ -296,9 +295,6 @@ function TimelineRow({ item }: { item: any }) {
   );
 }
 
-/* ========================================================= */
-/* ACTION PANEL COMPONENT SECTION (PROJECT DROP-DOWN REMOVED) */
-/* ========================================================= */
 function TicketActionButtons({
   ticket,
   onActionSuccess,
@@ -309,6 +305,9 @@ function TicketActionButtons({
   const [submitting, setSubmitting] = useState(false);
   const [resolutionText, setResolutionText] = useState("");
   const [memberId, setMemberId] = useState("");
+  
+  const [replyText, setReplyText] = useState("");
+  const [uploadedFilesForReply, setUploadedFilesForReply] = useState<any[]>([]);
 
   const [users, setUsers] = useState<UserDropdown[]>([]);
 
@@ -331,7 +330,6 @@ function TicketActionButtons({
 
     try {
       setSubmitting(true);
-      // Pass safe dummy project ID parameter ('1') behind the scenes to avoid breaking backend API contract schemas
       await ticketApi.assign({
         ticketNumber: ticket.ticketNumber,
         assignedMemberId: Number(memberId),
@@ -365,11 +363,62 @@ function TicketActionButtons({
     }
   };
 
+  const handleReplyFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || e.target.files.length === 0) return;
+    try {
+      setSubmitting(true);
+      const filesArray = Array.from(e.target.files);
+      const uploadedResults = [];
+
+      for (const file of filesArray) {
+        const response = await ticketApi.uploadFileToCloudinary(file);
+        
+        uploadedResults.push({
+          fileName: file.name,
+          fileType: file.type,
+          storagePath: response.storagePath || response.url || response.data?.url,
+          createdAt: new Date().toISOString() 
+        });
+      }
+      setUploadedFilesForReply((prev) => [...prev, ...uploadedResults]);
+      onActionSuccess("Attachments securely buffered onto Cloudinary nodes.", "success");
+    } catch (err) {
+      console.error("Cloudinary upload failure:", err);
+      onActionSuccess("Could not successfully finalize file attachment streaming transfer.", "error");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleSendAgentReply = async () => {
+    if (!replyText.trim()) return;
+    try {
+      setSubmitting(true);
+      
+      // ✅ SUCCESS: Hits the newly registered backend controller mapping endpoint cleanly
+      await ticketApi.sendReply({
+        ticketNumber: ticket.ticketNumber,
+        replyMessage: replyText.trim(),
+        attachments: uploadedFilesForReply
+      });
+
+      setReplyText("");
+      setUploadedFilesForReply([]);
+      onActionSuccess("Follow-up thread email message logged and dispatched.", "success");
+    } catch (err) {
+      console.error("Dispatched pipeline trace breakdown details:", err);
+      onActionSuccess("Inbound context parameter verification crash on backend routing endpoint.", "error");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
     <div className="mt-8 space-y-6">
       {/* ASSIGN SECTION */}
       {(ticket.ticketStatus === "OPEN" ||
         ticket.ticketStatus === "ASSIGNED" ||
+        ticket.ticketStatus === "IN_PROGRESS" ||
         ticket.ticketStatus === "RE_OPENED") && (
         <div className="bg-gray-50 border border-gray-200/70 rounded-xl p-5 shadow-inner">
           <h2 className="text-base font-bold text-gray-800 mb-4">Assign Ticket</h2>
@@ -400,8 +449,60 @@ function TicketActionButtons({
         </div>
       )}
 
+      {/* THREADED RE-REPLY BOX */}
+      {(ticket.ticketStatus === "ASSIGNED" || ticket.ticketStatus === "IN_PROGRESS") && (
+        <div className="bg-gray-50 border border-gray-200/70 rounded-xl p-5 shadow-inner">
+          <div className="mb-3">
+            <h2 className="text-base font-bold text-gray-800 flex items-center gap-2">
+              <Send size={16} className="text-blue-600" />
+              Reply to Customer Email Thread
+            </h2>
+            <p className="text-xs text-gray-400 font-semibold mt-0.5">
+              Dispatches an outbound message trailing the existing email tree chain. Moves status precisely to <span className="text-indigo-600 font-bold">IN_PROGRESS</span>.
+            </p>
+          </div>
+
+          <textarea
+            value={replyText}
+            onChange={(e) => setReplyText(e.target.value)}
+            placeholder="Provide clarity instructions or ask customer for explicit trace files..."
+            rows={4}
+            className="w-full border border-gray-300 rounded-xl bg-white p-3 text-sm outline-none focus:border-blue-500 transition-all font-medium"
+          />
+
+          {uploadedFilesForReply.length > 0 && (
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              {uploadedFilesForReply.map((file, idx) => (
+                <div key={idx} className="inline-flex items-center gap-1 bg-blue-50 border border-blue-200 text-blue-700 text-xs font-bold px-2.5 py-1 rounded-lg">
+                  <Paperclip size={11} />
+                  <span className="truncate max-w-[180px]">{file.fileName}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="mt-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <input
+              type="file"
+              multiple
+              onChange={handleReplyFileUpload}
+              disabled={submitting}
+              className="text-xs font-semibold text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-slate-200/70 file:text-gray-700 hover:file:bg-slate-200 cursor-pointer"
+            />
+            
+            <button
+              onClick={handleSendAgentReply}
+              disabled={submitting || !replyText.trim()}
+              className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white font-bold px-6 py-2.5 rounded-xl transition-all shadow-sm text-xs shrink-0"
+            >
+              {submitting ? "Sending..." : "Dispatch Trail Reply"}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* RESOLUTION SECTION */}
-      {ticket.ticketStatus === "ASSIGNED" && (
+      {(ticket.ticketStatus === "ASSIGNED" || ticket.ticketStatus === "IN_PROGRESS") && (
         <div className="bg-gray-50 border border-gray-200/70 rounded-xl p-5 shadow-inner">
           <h2 className="text-base font-bold text-gray-800 mb-4">Resolve Ticket</h2>
           <textarea

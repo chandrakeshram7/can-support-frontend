@@ -119,4 +119,26 @@ export const ticketApi = {
     });
     return response?.data;
   },
+
+  // ✅ FIXED: EXPOSED UI REPLY ROUTE TARGET ENDPOINT CONTRACT
+  sendReply: async (payload: {
+    ticketNumber: string;
+    replyMessage: string;
+    attachments: any[];
+  }): Promise<any> => {
+    return apiFetch("/tickets/reply", {
+      method: "POST", // Matches your java @PostMapping backend endpoint signature precisely
+      body: JSON.stringify(payload),
+    });
+  },
+
+  // Added Cloudinary binary processing node endpoint mapping configuration wrapper
+  uploadFileToCloudinary: async (file: File): Promise<any> => {
+    const formData = new FormData();
+    formData.append("file", file);
+    return apiFetch("/attachments/upload", {
+      method: "POST",
+      body: formData, // Framework content-type multi-part header is set dynamically by the browser
+    });
+  }
 };
