@@ -132,6 +132,16 @@ export const ticketApi = {
     });
     return response?.data || response;
   },
+ 
 
 
+  // ✅ FIXED: Route pointing cleanly to your actual master ticket controller endpoint map
+  async createTicket(payload: { customerMail: string; subject: string; body: string }) {
+    const response = await apiFetch<any>("/tickets/create", { 
+      method: "POST",
+      body: JSON.stringify(payload),
+      headers: {}, // ✅ CRITICAL: Forces apiFetch to map and inject the Bearer Auth token cleanly!
+    });
+    return response.data || response;
+  }
 };

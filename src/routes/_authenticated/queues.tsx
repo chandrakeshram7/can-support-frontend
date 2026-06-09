@@ -1,6 +1,6 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { PlusCircle, UserPlus, FolderPlus, Users, Search, Move, CheckCircle, RefreshCw } from "lucide-react";
+import { PlusCircle, UserPlus, FolderPlus, Users, Search, Move, CheckCircle, RefreshCw, ExternalLink } from "lucide-react";
 import { queueApi } from "../../lib/queue-api";   
 import { ticketApi } from "../../lib/ticket-api"; 
 
@@ -9,13 +9,15 @@ export const Route = createFileRoute("/_authenticated/queues")({
 });
 
 function QueuesPage() {
+  const navigate = useNavigate(); // ✅ Hook initialized correctly to redirect users
+
   const [queues, setQueues] = useState<any[]>([]);
   const [selectedQueue, setSelectedQueue] = useState<any>(null);
   const [ticketNumbers, setTicketNumbers] = useState("");
   const [assignments, setAssignments] = useState<Record<string, number>>({});
   const [filteredTickets, setFilteredTickets] = useState<any[]>([]);
   const [allTickets, setAllTickets] = useState<any[]>([]);
-  const [allUsers, setAllUsers] = useState<any[]>([]); // ✅ For membership dropdown
+  const [allUsers, setAllUsers] = useState<any[]>([]); 
   const [loading, setLoading] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
@@ -26,7 +28,6 @@ function QueuesPage() {
   const [activeResolutionId, setActiveResolutionId] = useState<string | null>(null);
   const [resolutionText, setResolutionText] = useState("");
 
-  /* ✅ MODAL CONFIG STATE FOR NEW MANAGEMENT CONTROLS */
   const [showCreateQueueModal, setShowCreateQueueModal] = useState(false);
   const [newQueueName, setNewQueueName] = useState("");
   const [newQueueDescription, setNewQueueDescription] = useState("");
@@ -38,7 +39,6 @@ function QueuesPage() {
         const ticketsData = await ticketApi.getAll();
         setAllTickets(ticketsData || []);
 
-        // Fetching all system users from dropdown profile registries to add members
         const usersData = await ticketApi.getAllUsers();
         setAllUsers(usersData || []);
 
@@ -116,7 +116,6 @@ function QueuesPage() {
     setTimeout(() => setErrorMessage(""), 3000);
   }
 
-  /* ✅ SUBMIT CREATE QUEUE TO BACKEND SERVICE */
   async function handleCreateQueue(e: React.FormEvent) {
     e.preventDefault();
     if (!newQueueName.trim()) return;
@@ -133,7 +132,6 @@ function QueuesPage() {
       setNewQueueDescription("");
       setShowCreateQueueModal(false);
       
-      // Reload summaries and focus on the newly made partition
       const queuesData = await queueApi.getQueueSummaries();
       setQueues(queuesData || []);
       if (createdQueue?.id || createdQueue?.queueId) {
@@ -147,7 +145,6 @@ function QueuesPage() {
     }
   }
 
-  /* ✅ SUBMIT ADD MEMBER ROUTING INTERACTION PROFILE */
   async function handleAddMemberToQueue() {
     if (!selectedQueue || !selectedMemberToJoinId) return;
 
@@ -278,7 +275,6 @@ function QueuesPage() {
         return;
       }
 
-      // ✅ PROJECT BINDING REMOVED: Passing standard fallback ID '1' to support backward-compatible API contracts safely
       await queueApi.assignTicket(ticketNumber, {
         assignedMemberId,
         projectId: 1,
@@ -340,7 +336,7 @@ function QueuesPage() {
       {errorMessage && <div className="mb-4 rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-red-700 shadow-sm font-semibold text-sm animate-fade-in">{errorMessage}</div>}
 
       <div className="flex gap-6">
-        {/* SIDEBAR PANEL WITH CREATE QUEUE INJECTION */}
+        {/* SIDEBAR PANEL */}
         <div className="w-[300px] shrink-0 space-y-4">
           <button
             onClick={() => setShowCreateQueueModal(true)}
@@ -389,7 +385,7 @@ function QueuesPage() {
             </div>
           ) : (
             <>
-              {/* NEW COMPONENT ROW PANEL: MANAGE QUEUE MEMBERSHIP INLINE */}
+              {/* MEMBERSHIP PANEL */}
               <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 mb-5">
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between border-b border-gray-100 pb-3 mb-4">
                   <div>
@@ -439,7 +435,7 @@ function QueuesPage() {
                 </div>
               </div>
 
-              {/* SEARCH & BULK ENTRY ACTION BAR */}
+              {/* ACTION ACTIONS HUB */}
               <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 mb-5 flex flex-col gap-4">
                 <div className="flex flex-col lg:flex-row gap-3">
                   <div className="flex-1 relative">
@@ -494,7 +490,7 @@ function QueuesPage() {
                 </div>
               </div>
 
-              {/* TABLE LIST ENVIRONMENT DIRECTORY */}
+              {/* INTERACTIVE DATA GRID TABLE */}
               <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
                 <div className="px-6 py-4 border-b border-gray-100 bg-gray-50/50 flex items-center justify-between">
                   <div>
@@ -526,7 +522,20 @@ function QueuesPage() {
                           return (
                             <tr key={ticket.ticketId || ticket.ticketNumber} className="hover:bg-gray-50/50 transition-colors">
                               <td className="p-4 pl-6 max-w-[340px]">
-                                <div className="font-bold text-gray-900 text-[14px] truncate">{ticket.ticketTitle || ticket.subject}</div>
+                                {/* ✅ FIXED: Wrapped heading content strings in interactive navigation elements */}
+                                <button
+                                  type="button"
+                                  onClick={() => navigate({
+                                    to: "/ticket/$ticketNumber",
+                                    params: { ticketNumber: ticket.ticketNumber }
+                                  })}
+                                  className="group block text-left outline-none"
+                                >
+                                  <div className="font-bold text-gray-900 text-[14px] group-hover:text-blue-600 transition-colors flex items-center gap-1.5">
+                                    <span className="truncate">{ticket.ticketTitle || ticket.subject}</span>
+                                    <ExternalLink size={12} className="opacity-0 group-hover:opacity-100 transition-opacity text-blue-500 shrink-0" />
+                                  </div>
+                                </button>
                                 <div className="flex gap-2 items-center mt-1 text-[12px] font-bold text-gray-400">
                                   <span className="bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide">ID</span>
                                   {ticket.ticketNumber || "Unassigned"}
@@ -546,7 +555,6 @@ function QueuesPage() {
                                 }`}>{ticket.ticketStatus}</span>
                               </td>
 
-                              {/* ✅ UPDATED COLUMN: DROPPED BOTH SELECT PROJECT PARAMETERS AND MARKUP LABELS CLEANLY */}
                               <td className="p-4">
                                 {ticket.assignedTo || ticket.ticketStatus === "RESOLVED" ? (
                                   <div className="flex items-center gap-2">
