@@ -17,13 +17,16 @@ export const Route = createFileRoute("/_authenticated/chat")({
 
 function ChatPage() {
   const [currentUserId, setCurrentUserId] = useState<number | null>(null);
-  const [allUsers, setAllUsers] = useState<any[]>([]); // Full repository from database
+  const [allUsers, setAllUsers] = useState<any[]>([]); 
   const [selectedUser, setSelectedUser] = useState<any>(null);
   const [messages, setMessages] = useState<any[]>([]);
   const [messageInput, setMessageInput] = useState("");
   const [isConnected, setIsConnected] = useState(false);
 
-  /* ✅ FILTER & LOOKUP STATES */
+  /* ✅ STABLE PRESENCE STATE MAP ARRAY */
+  const [onlineUserIds, setOnlineUserIds] = useState<number[]>([]);
+
+  /* FILTER & LOOKUP STATES */
   const [userSearchQuery, setUserSearchQuery] = useState("");
   const [activeChatIds, setActiveChatIds] = useState<number[]>([]);
   const [showDropdown, setShowDropdown] = useState(false);
@@ -38,6 +41,7 @@ function ChatPage() {
 
   const stompClientRef = useRef<Client | null>(null);
   const subscriptionRef = useRef<any>(null); 
+  const statusSubscriptionRef = useRef<any>(null); 
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const dropdownRef = useRef<HTMLDivElement | null>(null);
 
@@ -51,7 +55,6 @@ function ChatPage() {
       const parsedId = Number(userId);
       setCurrentUserId(parsedId);
 
-      // Load specific user's active chats from localStorage cache
       const cachedChats = localStorage.getItem(`activeChats_${parsedId}`);
       if (cachedChats) {
         setActiveChatIds(JSON.parse(cachedChats));
@@ -60,7 +63,6 @@ function ChatPage() {
       console.error("JWT payload parse mismatch:", err);
     }
 
-    // Close global user search drop menu when clicking away
     const handleClickOutside = (event: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setShowDropdown(false);
@@ -70,9 +72,12 @@ function ChatPage() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Sync Sidebar Team Roster Listings
+  // Sync Sidebar Team Roster Listings & Fetch Active States
   useEffect(() => {
-    if (currentUserId) loadUsers();
+    if (currentUserId) {
+      loadUsers();
+      loadInitialPresenceState(); // ✅ FIXED: Pull active baseline state array straight away
+    }
   }, [currentUserId]);
 
   async function loadUsers() {
@@ -85,7 +90,20 @@ function ChatPage() {
     }
   }
 
-  /* ✅ ACTION HANDLER: Appends a new colleague to the active sidebar roster mapping matrix */
+  /* ✅ NEW RECOVERY LOADER: Guarantees full synchronization upon application instantiation loops */
+  async function loadInitialPresenceState() {
+    try {
+      const activeIds = await chatApi.getOnlineUsers();
+      if (Array.isArray(activeIds)) {
+        setOnlineUserIds(activeIds.map(Number));
+      } else if (activeIds && Array.isArray(activeIds.data)) {
+        setOnlineUserIds(activeIds.data.map(Number));
+      }
+    } catch (err) {
+      console.error("Failed to query initial presence state matrix maps: ", err);
+    }
+  }
+
   const handleAddUserToChats = (user: any) => {
     if (activeChatIds.includes(user.id)) {
       setSelectedUser(user);
@@ -104,7 +122,6 @@ function ChatPage() {
     setShowDropdown(false);
   };
 
-  /* ✅ FILTER MATRICES: Computed properties matching the new privacy scoping directives */
   const sidebarVisibleUsers = useMemo(() => {
     return allUsers.filter((u) => activeChatIds.includes(u.id));
   }, [allUsers, activeChatIds]);
@@ -131,6 +148,12 @@ function ChatPage() {
       reconnectDelay: 3000,
       heartbeatIncoming: 10000,
       heartbeatOutgoing: 10000,
+      
+      // ✅ PASSED HEADER BINDINGS: Notifies Spring EventListeners exactly who opened the socket frame channel
+      connectHeaders: {
+        userId: String(currentUserId),
+      },
+
       onConnect: () => {
         setIsConnected(true);
       },
@@ -147,26 +170,29 @@ function ChatPage() {
 
     return () => {
       if (subscriptionRef.current) subscriptionRef.current.unsubscribe();
+      if (statusSubscriptionRef.current) statusSubscriptionRef.current.unsubscribe();
       client.deactivate();
     };
   }, [currentUserId]);
 
-  /* Live Subscription Synchronizer - Handles live incoming message alerts */
+  /* Live Subscription Synchronizer - Message alerts & Presence Tracking */
   useEffect(() => {
     if (!stompClientRef.current || !isConnected || !currentUserId) return;
 
     if (subscriptionRef.current) {
       subscriptionRef.current.unsubscribe();
-      subscriptionRef.current = null;
+    }
+    if (statusSubscriptionRef.current) {
+      statusSubscriptionRef.current.unsubscribe();
     }
 
+    // 1. CHAT MESSAGE MESSAGING STREAM HANDLER
     subscriptionRef.current = stompClientRef.current.subscribe(
       `/topic/messages/${currentUserId}`,
       (message) => {
         const received = JSON.parse(message.body);
         const isFromSelected = selectedUser && received.senderId === selectedUser.id;
 
-        // ✅ AUTO-POPULATE: If an unlisted user pings us, automatically reveal them in the sidebar
         if (!activeChatIds.includes(received.senderId)) {
           setActiveChatIds((prev) => {
             const next = [...prev, received.senderId];
@@ -186,7 +212,6 @@ function ChatPage() {
             return [...prev, received];
           });
         } else {
-          // UPDATE UNREAD BADGE IF ORIGINATOR IS IN BACKGROUND
           setUnreadCounts((prev) => ({
             ...prev,
             [received.senderId]: (prev[received.senderId] || 0) + 1,
@@ -195,8 +220,24 @@ function ChatPage() {
       }
     );
 
+    // 2. LIVE PRESENCE TRACKING SUBSCRIPTION
+    statusSubscriptionRef.current = stompClientRef.current.subscribe(
+      `/topic/users/status`,
+      (statusMessage) => {
+        const presenceEvent = JSON.parse(statusMessage.body); 
+        const eventUserId = Number(presenceEvent.userId);
+
+        if (presenceEvent.status === "ONLINE") {
+          setOnlineUserIds((prev) => (prev.includes(eventUserId) ? prev : [...prev, eventUserId]));
+        } else {
+          setOnlineUserIds((prev) => prev.filter((id) => id !== eventUserId));
+        }
+      }
+    );
+
     return () => {
       if (subscriptionRef.current) subscriptionRef.current.unsubscribe();
+      if (statusSubscriptionRef.current) statusSubscriptionRef.current.unsubscribe();
     };
   }, [selectedUser, isConnected, currentUserId, activeChatIds]);
 
@@ -204,7 +245,6 @@ function ChatPage() {
   useEffect(() => {
     if (selectedUser && currentUserId) {
       loadConversation(selectedUser.id);
-      // WIPE BADGE AUTOMATICALLY UPON SELECTING ACTIVE CHANNEL TAB VIEW
       setUnreadCounts((prev) => ({ ...prev, [selectedUser.id]: 0 }));
     }
   }, [selectedUser, currentUserId]);
@@ -289,7 +329,7 @@ function ChatPage() {
             </div>
           </div>
 
-          {/* ✅ NEW FEATURE UI: Unified Search & Directory Injection Form */}
+          {/* SEARCH & DIRECTORY ENTRY INPUT */}
           <div className="relative" ref={dropdownRef}>
             <div className="relative flex items-center bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 focus-within:border-blue-500 focus-within:bg-white transition-all">
               <Search size={16} className="text-gray-400 mr-2 shrink-0" />
@@ -333,7 +373,7 @@ function ChatPage() {
           </div>
         </div>
 
-        {/* ACTIVE USERS LIST BOX CONTAINER */}
+        {/* ACTIVE USERS SIDEBAR THREADS LIST */}
         <div className="flex-1 overflow-y-auto divide-y divide-gray-50">
           {sidebarVisibleUsers.length === 0 ? (
             <div className="p-8 text-center text-xs font-medium text-gray-400 leading-relaxed italic">
@@ -342,6 +382,8 @@ function ChatPage() {
           ) : (
             sidebarVisibleUsers.map((user) => {
               const count = unreadCounts[user.id] || 0;
+              const isUserOnline = onlineUserIds.includes(Number(user.id));
+
               return (
                 <button
                   key={user.id}
@@ -354,6 +396,12 @@ function ChatPage() {
                     <div className="w-11 h-11 rounded-full bg-slate-800 text-white flex items-center justify-center font-bold text-sm uppercase">
                       {user.username?.charAt(0)}
                     </div>
+                    
+                    {/* PIP Presence Indicator Badge */}
+                    <span className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-white ${
+                      isUserOnline ? "bg-emerald-500 animate-pulse" : "bg-gray-300"
+                    }`} />
+
                     {count > 0 && (
                       <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] w-5 h-5 rounded-full flex items-center justify-center font-extrabold border-2 border-white animate-bounce">
                         {count}
@@ -365,7 +413,7 @@ function ChatPage() {
                       {user.username}
                     </div>
                     <div className="text-xs text-gray-400 truncate mt-0.5">
-                      {count > 0 ? "📩 New message received" : "Open conversation thread"}
+                      {count > 0 ? "📩 New message received" : isUserOnline ? "🟢 Active now" : "Offline"}
                     </div>
                   </div>
                 </button>
@@ -389,7 +437,19 @@ function ChatPage() {
               </div>
               <div>
                 <div className="font-bold text-gray-800 text-base">{selectedUser.username}</div>
-                <div className="text-xs text-emerald-500 font-semibold flex items-center gap-1">Online</div>
+                
+                {/* DYNAMIC HEADER COMPONENT */}
+                {onlineUserIds.includes(Number(selectedUser.id)) ? (
+                  <div className="text-xs text-emerald-500 font-bold flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block animate-pulse" />
+                    Online
+                  </div>
+                ) : (
+                  <div className="text-xs text-gray-400 font-semibold flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-gray-300 inline-block" />
+                    Offline
+                  </div>
+                )}
               </div>
             </div>
 
@@ -406,7 +466,6 @@ function ChatPage() {
                     }`}>
                       <div className="break-words font-medium">{textContent}</div>
                       
-                      {/* ATTACHMENT ACTION BAR LINK RENDERING */}
                       {msg.attachmentUrl && (
                         <div className="mt-2 pt-2 border-t border-slate-200/20 flex items-center gap-2">
                           <FileText size={16} />
@@ -425,7 +484,7 @@ function ChatPage() {
               <div ref={messagesEndRef} />
             </div>
 
-            {/* ATTACHMENT BUFFER FOOTER STATUS STRIP */}
+            {/* ATTACHMENT BUFFER STATUS STRIP */}
             {activeAttachmentName && (
               <div className="bg-blue-50 border-t border-blue-200 px-6 py-2 flex items-center justify-between text-xs font-bold text-blue-700">
                 <span>📎 Staged Document: {activeAttachmentName}</span>
@@ -433,7 +492,7 @@ function ChatPage() {
               </div>
             )}
 
-            {/* INTERACTION ACTION PANEL PANEL FOOTER */}
+            {/* INTERACTION PANEL FOOTER */}
             <div className="bg-white border-t border-gray-200 p-4 flex gap-3 shadow-md items-center">
               <label className={`p-2.5 rounded-xl border border-gray-300 bg-gray-50 text-gray-500 cursor-pointer hover:bg-gray-100 transition-all ${uploading ? "opacity-40 animate-pulse" : ""}`}>
                 <Paperclip size={18} />

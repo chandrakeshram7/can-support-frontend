@@ -49,5 +49,13 @@ export const chatApi = {
     });
 
     return response?.data ? response.data : response;
+  },
+
+  async getOnlineUsers() {
+    const response = await apiFetch<any>("/tickets/online-users", {
+      method: "GET"
+    });
+    return response.data || response;
   }
+  
 };
