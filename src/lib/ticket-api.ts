@@ -123,5 +123,15 @@ export const ticketApi = {
       body: formData,
     });
     return response?.data ? response.data : response;
-  }
+  },
+
+  reopen: async (ticketNumber: string) => {
+    const response = await apiFetch<any>(`/tickets/reopen/${ticketNumber}`, {
+      method: "PUT",
+      headers: {}, // Explicit initialization allows apiFetch to inject Bearer tokens securely
+    });
+    return response?.data || response;
+  },
+
+
 };

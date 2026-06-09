@@ -10,111 +10,69 @@ export const Route = createFileRoute("/_authenticated/tickets")({
 function TicketsPage() {
   const navigate = useNavigate();
 
-  const [openTickets, setOpenTickets] =
-    useState<Ticket[]>([]);
+  const [openTickets, setOpenTickets] = useState<Ticket[]>([]);
+  const [assignedTickets, setAssignedTickets] = useState<Ticket[]>([]);
+  const [resolvedTickets, setResolvedTickets] = useState<Ticket[]>([]);
+  const [reopenedTickets, setReopenedTickets] = useState<Ticket[]>([]);
 
-  const [assignedTickets, setAssignedTickets] =
-    useState<Ticket[]>([]);
-
-  const [resolvedTickets, setResolvedTickets] =
-    useState<Ticket[]>([]);
-
-  const [reopenedTickets, setReopenedTickets] =
-    useState<Ticket[]>([]);
-
-  const [loading, setLoading] =
-    useState(true);
-
-  const [error, setError] =
-    useState("");
-
-  const [searchTerm, setSearchTerm] =
-    useState("");
-
-  const [statusFilter, setStatusFilter] =
-    useState("ALL");
-
-  const [assignedFilter, setAssignedFilter] =
-    useState("ALL");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState("ALL");
+  const [assignedFilter, setAssignedFilter] = useState("ALL");
 
   // ✅ PRESERVED STABLE STATE: Project filter state kept active for logical array safety
-  const [projectFilter, setProjectFilter] =
-    useState("ALL");
+  const [projectFilter, setProjectFilter] = useState("ALL");
+  const [sortOrder, setSortOrder] = useState("LATEST");
+  const [showArchived, setShowArchived] = useState(false);
+  const [archivedTickets, setArchivedTickets] = useState<string[]>([]);
 
-  const [sortOrder, setSortOrder] =
-    useState("LATEST");
-
-  const [showArchived, setShowArchived] =
-    useState(false);
-
-  const [archivedTickets, setArchivedTickets] =
-    useState<string[]>([]);
-
-  useEffect(() => {
-    loadTickets();
-
-    const stored =
-      localStorage.getItem(
-        "archivedTickets"
-      );
-
-    if (stored) {
-      setArchivedTickets(
-        JSON.parse(stored)
-      );
-    }
-  }, []);
-
-  const loadTickets = async () => {
+  /* ✅ ACTION HANDLER: Calls the updated backend re-open service pipeline directly */
+  const handleReopenTicket = async (ticketNumber: string) => {
     try {
-      const [
-        open,
-        assigned,
-        resolved,
-        reopened,
-      ] = await Promise.all([
-        ticketApi.getTicketsByStatus("OPEN"),
-
-        ticketApi.getTicketsByStatus(
-          "ASSIGNED"
-        ),
-
-        ticketApi.getTicketsByStatus(
-          "RESOLVED"
-        ),
-
-        ticketApi.getTicketsByStatus(
-          "RE_OPENED"
-        ),
-      ]);
-
-      setOpenTickets(open || []);
-
-      setAssignedTickets(
-        assigned || []
-      );
-
-      setResolvedTickets(
-        resolved || []
-      );
-
-      setReopenedTickets(
-        reopened || []
-      );
+      setLoading(true);
+      await ticketApi.reopen(ticketNumber);
+      // Automatically refresh dashboard state arrays from database with fresh status fields
+      await loadTickets();
     } catch (err) {
-      console.error(err);
-
-      setError(
-        "Failed to load tickets"
-      );
+      console.error("Dashboard failed to reopen target ticket contract details:", err);
+      alert("Could not process reopening sequence. Please inspect server logs.");
     } finally {
       setLoading(false);
     }
   };
 
-  const archiveTicket = (
-    ticketNumber: string
-  ) => {
+  useEffect(() => {
+    loadTickets();
+
+    const stored = localStorage.getItem("archivedTickets");
+    if (stored) {
+      setArchivedTickets(JSON.parse(stored));
+    }
+  }, []);
+
+  const loadTickets = async () => {
+    try {
+      const [open, assigned, resolved, reopened] = await Promise.all([
+        ticketApi.getTicketsByStatus("OPEN"),
+        ticketApi.getTicketsByStatus("ASSIGNED"),
+        ticketApi.getTicketsByStatus("RESOLVED"),
+        ticketApi.getTicketsByStatus("RE_OPENED"),
+      ]);
+
+      setOpenTickets(open || []);
+      setAssignedTickets(assigned || []);
+      setResolvedTickets(resolved || []);
+      setReopenedTickets(reopened || []);
+    } catch (err) {
+      console.error(err);
+      setError("Failed to load tickets");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const archiveTicket = (ticketNumber: string) => {
     const updated = [
       ...archivedTickets,
       ticketNumber,
@@ -128,13 +86,10 @@ function TicketsPage() {
     );
   };
 
-  const unarchiveTicket = (
-    ticketNumber: string
-  ) => {
-    const updated =
-      archivedTickets.filter(
-        (t) => t !== ticketNumber
-      );
+  const unarchiveTicket = (ticketNumber: string) => {
+    const updated = archivedTickets.filter(
+      (t) => t !== ticketNumber
+    );
 
     setArchivedTickets(updated);
 
@@ -155,9 +110,7 @@ function TicketsPage() {
     ...new Set(
       allTickets
         .map(
-          (t) =>
-            t.assignedMember
-              ?.username
+          (t) => t.assignedMember?.username
         )
         .filter(Boolean)
     ),
@@ -168,9 +121,7 @@ function TicketsPage() {
     ...new Set(
       allTickets
         .map(
-          (t) =>
-            t.project
-              ?.projectName
+          (t) => t.project?.projectName
         )
         .filter(Boolean)
     ),
@@ -180,10 +131,9 @@ function TicketsPage() {
   const filteredTickets = useMemo(() => {
     return allTickets
       .filter((ticket) => {
-        const isArchived =
-          archivedTickets.includes(
-            ticket.ticketNumber
-          );
+        const isArchived = archivedTickets.includes(
+          ticket.ticketNumber
+        );
 
         if (
           showArchived
@@ -212,22 +162,15 @@ function TicketsPage() {
 
         const matchesStatus =
           statusFilter === "ALL" ||
-          ticket.ticketStatus ===
-            statusFilter;
+          ticket.ticketStatus === statusFilter;
 
         const matchesAssigned =
-          assignedFilter ===
-            "ALL" ||
-          ticket.assignedMember
-            ?.username ===
-            assignedFilter;
+          assignedFilter === "ALL" ||
+          ticket.assignedMember?.username === assignedFilter;
 
         const matchesProject =
-          projectFilter ===
-            "ALL" ||
-          ticket.project
-            ?.projectName ===
-            projectFilter;
+          projectFilter === "ALL" ||
+          ticket.project?.projectName === projectFilter;
 
         return (
           matchesSearch &&
@@ -237,18 +180,15 @@ function TicketsPage() {
         );
       })
       .sort((a, b) => {
-        const aDate =
-          new Date(
-            a.createdAt
-          ).getTime();
+        const aDate = new Date(
+          a.createdAt
+        ).getTime();
 
-        const bDate =
-          new Date(
-            b.createdAt
-          ).getTime();
+        const bDate = new Date(
+          b.createdAt
+        ).getTime();
 
-        return sortOrder ===
-          "LATEST"
+        return sortOrder === "LATEST"
           ? bDate - aDate
           : aDate - bDate;
       });
@@ -263,9 +203,7 @@ function TicketsPage() {
     sortOrder,
   ]);
 
-  const getStatusColor = (
-    status: string
-  ) => {
+  const getStatusColor = (status: string) => {
     switch (status) {
       case "OPEN":
         return "bg-red-100 text-red-700";
@@ -313,8 +251,7 @@ function TicketsPage() {
           </h1>
 
           <p className="text-gray-500 mt-1">
-            Manage support tickets
-            efficiently
+            Manage support tickets efficiently
           </p>
         </div>
 
@@ -587,6 +524,16 @@ function TicketsPage() {
                   >
                     View Ticket
                   </button>
+
+                  {/* ✅ TARGETED UPDATE: Render Reopen button dynamically if status is RESOLVED */}
+                  {ticket.ticketStatus === "RESOLVED" && (
+                    <button
+                      onClick={() => handleReopenTicket(ticket.ticketNumber)}
+                      className="bg-orange-500 hover:bg-orange-600 text-white px-5 py-2 rounded-xl font-medium transition-all shadow-sm"
+                    >
+                      Reopen Ticket
+                    </button>
+                  )}
 
                   {!archivedTickets.includes(
                     ticket.ticketNumber
