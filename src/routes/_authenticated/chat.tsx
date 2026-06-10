@@ -76,7 +76,7 @@ function ChatPage() {
   useEffect(() => {
     if (currentUserId) {
       loadUsers();
-      loadInitialPresenceState(); // ✅ FIXED: Pull active baseline state array straight away
+      loadInitialPresenceState(); 
     }
   }, [currentUserId]);
 
@@ -90,7 +90,6 @@ function ChatPage() {
     }
   }
 
-  /* ✅ NEW RECOVERY LOADER: Guarantees full synchronization upon application instantiation loops */
   async function loadInitialPresenceState() {
     try {
       const activeIds = await chatApi.getOnlineUsers();
@@ -149,7 +148,6 @@ function ChatPage() {
       heartbeatIncoming: 10000,
       heartbeatOutgoing: 10000,
       
-      // ✅ PASSED HEADER BINDINGS: Notifies Spring EventListeners exactly who opened the socket frame channel
       connectHeaders: {
         userId: String(currentUserId),
       },
@@ -397,7 +395,6 @@ function ChatPage() {
                       {user.username?.charAt(0)}
                     </div>
                     
-                    {/* PIP Presence Indicator Badge */}
                     <span className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-white ${
                       isUserOnline ? "bg-emerald-500 animate-pulse" : "bg-gray-300"
                     }`} />
@@ -438,7 +435,6 @@ function ChatPage() {
               <div>
                 <div className="font-bold text-gray-800 text-base">{selectedUser.username}</div>
                 
-                {/* DYNAMIC HEADER COMPONENT */}
                 {onlineUserIds.includes(Number(selectedUser.id)) ? (
                   <div className="text-xs text-emerald-500 font-bold flex items-center gap-1">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block animate-pulse" />
@@ -469,7 +465,43 @@ function ChatPage() {
                       {msg.attachmentUrl && (
                         <div className="mt-2 pt-2 border-t border-slate-200/20 flex items-center gap-2">
                           <FileText size={16} />
-                          <a href={msg.attachmentUrl} target="_blank" rel="noreferrer" className="underline text-xs font-bold flex items-center gap-0.5">
+                          {/* ✅ FIXED DYNAMIC DOWNLOAD ANCHOR: Safely reads and preserves .xlsx, .docx, and .pdf file type layouts */}
+                          <a 
+                            href={msg.attachmentUrl} 
+                            download={msg.attachmentName || "download"}
+                            className="underline text-xs font-bold flex items-center gap-0.5 text-blue-200 hover:text-white transition-colors"
+                            onClick={(e) => {
+                              if (msg.attachmentUrl.includes('/raw/')) {
+                                e.preventDefault();
+                                
+                                const resolvedName = msg.attachmentName || "document";
+                                let targetExtension = "";
+                                
+                                if (!resolvedName.includes(".")) {
+                                  const urlParts = msg.attachmentUrl.split(".");
+                                  targetExtension = urlParts.length > 1 ? `.${urlParts.pop()}` : "";
+                                }
+
+                                const finalDownloadName = resolvedName.endsWith(targetExtension) 
+                                  ? resolvedName 
+                                  : `${resolvedName}${targetExtension}`;
+
+                                fetch(msg.attachmentUrl)
+                                  .then(res => res.blob())
+                                  .then(blob => {
+                                    const blobUrl = window.URL.createObjectURL(blob);
+                                    const virtualLink = document.createElement('a');
+                                    virtualLink.href = blobUrl;
+                                    virtualLink.download = finalDownloadName; 
+                                    document.body.appendChild(virtualLink);
+                                    virtualLink.click();
+                                    window.URL.revokeObjectURL(blobUrl);
+                                    virtualLink.remove();
+                                  })
+                                  .catch(err => console.error("Blob proxy download stream error context trace:", err));
+                              }
+                            }}
+                          >
                             {msg.attachmentName || "View Attachment"} <ExternalLink size={12} />
                           </a>
                         </div>
