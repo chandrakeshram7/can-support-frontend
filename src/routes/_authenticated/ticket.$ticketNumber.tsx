@@ -1,12 +1,46 @@
+if (typeof global === "undefined") {
+  (window as any).global = window;
+}
+
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { ChevronDown, ChevronRight, CheckCircle2, AlertCircle, Paperclip, Download, ArrowRightLeft, Send } from "lucide-react";
+import { ChevronDown, ChevronRight, CheckCircle2, AlertCircle, Paperclip, Download, ArrowRightLeft, Send, ShieldAlert, AlertTriangle, Lock } from "lucide-react";
 
 import { ticketApi, UserDropdown } from "@/lib/ticket-api";
 
 export const Route = createFileRoute("/_authenticated/ticket/$ticketNumber")({
   component: TicketDetailsPage,
 });
+
+const getBackendBaseUrl = (): string => {
+  const currentHost = window.location.hostname;
+  if (currentHost === "localhost" || currentHost === "127.0.0.1") {
+    return "http://localhost:8080";
+  }
+  return "https://can-support-backend.onrender.com";
+};
+
+// HELPER UTILITY: Decodes roles from JWT clientside safely
+const getUserRoles = (): string[] => {
+  try {
+    const token = localStorage.getItem("accessToken");
+    if (!token) return [];
+    const base64Url = token.split(".")[1];
+    const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
+    const jsonPayload = decodeURIComponent(
+      window
+        .atob(base64)
+        .split("")
+        .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
+        .join("")
+    );
+    const parsed = JSON.parse(jsonPayload);
+    return Array.isArray(parsed.roles) ? parsed.roles : parsed.role ? [parsed.role] : [];
+  } catch (e) {
+    console.error("Failed to parse user session roles token payload:", e);
+    return [];
+  }
+};
 
 function TicketDetailsPage() {
   const { ticketNumber } = Route.useParams();
@@ -78,6 +112,31 @@ function TicketDetailsPage() {
     return items.sort((a, b) => a.sortDate - b.sortDate);
   }, [ticket]);
 
+  // ✅ PROGRAMMATIC DOWNLOAD HANDLER: Bypasses cross-origin naming blocks completely
+  const executeSecureDownload = async (event: React.MouseEvent, storagePath: string, fileName: string) => {
+    event.preventDefault();
+    try {
+      const response = await fetch(storagePath);
+      const binaryBlob = await response.blob();
+      
+      const localBlobUrl = window.URL.createObjectURL(binaryBlob);
+      const hiddenAnchor = document.createElement("a");
+      hiddenAnchor.href = localBlobUrl;
+      hiddenAnchor.download = fileName || "download.pdf";
+      
+      document.body.appendChild(hiddenAnchor);
+      hiddenAnchor.click();
+      
+      // Clean up DOM objects out of thread memory allocation memory spaces
+      document.body.removeChild(hiddenAnchor);
+      window.URL.revokeObjectURL(localBlobUrl);
+    } catch (error) {
+      console.error("Local context download hydration exception caught:", error);
+      // Fallback: Attempt opening in standard external window tab space if local stream drops
+      window.open(storagePath, "_blank");
+    }
+  };
+
   if (loading) {
     return <div className="flex items-center justify-center min-h-screen font-medium text-gray-500">Loading...</div>;
   }
@@ -98,6 +157,19 @@ function TicketDetailsPage() {
         </div>
       )}
 
+      {/* CRITICAL ESCALATION ATTENTION HEADER BANNER */}
+      {(ticket.ticketStatus === "ESCALATED" || ticket.isEscalated) && (
+        <div className="mb-4 max-w-6xl mx-auto flex items-start gap-3 bg-gradient-to-r from-red-600 to-red-700 text-white rounded-2xl p-5 shadow-md animate-pulse">
+          <ShieldAlert size={24} className="shrink-0 mt-0.5" />
+          <div>
+            <h3 className="font-bold text-sm uppercase tracking-wider">This Ticket is Escalated ({ticket.escalationReason || "USER_REQUESTED"})</h3>
+            <p className="text-xs text-red-100 mt-1 font-medium leading-relaxed">
+              Reason Details: {ticket.escalationNotes || "Bypassed standard queue triage layers via escalation matrix thresholds."}
+            </p>
+          </div>
+        </div>
+      )}
+
       <div className="bg-white rounded-2xl shadow-sm border border-gray-200/80 p-6 max-w-6xl mx-auto">
         {/* HEADER */}
         <div className="flex justify-between items-start border-b border-gray-100 pb-4">
@@ -106,19 +178,31 @@ function TicketDetailsPage() {
             <p className="text-gray-400 font-semibold text-xs mt-1 uppercase tracking-wider">{ticket.ticketNumber}</p>
           </div>
 
-          <span className={`px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-wide ${
-            ticket.ticketStatus === "OPEN"
-              ? "bg-yellow-100 text-yellow-700"
-              : ticket.ticketStatus === "ASSIGNED"
-                ? "bg-blue-100 text-blue-700"
-                : ticket.ticketStatus === "IN_PROGRESS"
-                  ? "bg-indigo-100 text-indigo-700" 
-                  : ticket.ticketStatus === "RESOLVED"
-                    ? "bg-green-100 text-green-700"
-                    : "bg-gray-100 text-gray-700"
-          }`}>
-            {ticket.ticketStatus}
-          </span>
+          <div className="flex items-center gap-2">
+            {ticket.reopenCount > 0 && (
+              <span className="px-2.5 py-1 bg-amber-50 text-amber-700 border border-amber-200 rounded-lg text-[11px] font-extrabold tracking-wide uppercase">
+                Reopened Loops: {ticket.reopenCount}/3
+              </span>
+            )}
+
+            <span className={`px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-wide ${
+              ticket.ticketStatus === "OPEN"
+                ? "bg-yellow-100 text-yellow-700"
+                : ticket.ticketStatus === "ASSIGNED"
+                  ? "bg-blue-100 text-blue-700"
+                  : ticket.ticketStatus === "IN_PROGRESS"
+                    ? "bg-indigo-100 text-indigo-700" 
+                    : ticket.ticketStatus === "RESOLVED"
+                      ? "bg-green-100 text-green-700"
+                      : ticket.ticketStatus === "ESCALATED"
+                        ? "bg-red-600 text-white border border-red-700 font-extrabold"
+                        : ticket.ticketStatus === "RE_OPENED"
+                          ? "bg-orange-100 text-orange-700 border border-orange-200"
+                          : "bg-gray-100 text-gray-700"
+            }`}>
+              {ticket.ticketStatus}
+            </span>
+          </div>
         </div>
 
         {/* INITIAL ROOT ATTACHMENTS */}
@@ -129,16 +213,14 @@ function TicketDetailsPage() {
             </h3>
             <div className="flex flex-wrap gap-2">
               {ticket.attachments.map((file: any) => (
-                <a
-                  key={file.id}
-                  href={file.storagePath}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                <button
+                  key={file.id || file.storagePath}
+                  onClick={(e) => executeSecureDownload(e, file.storagePath, file.fileName)}
                   className="flex items-center gap-2 px-3 py-2 bg-white hover:bg-blue-50/50 border border-gray-200 hover:border-blue-300 rounded-xl transition-all text-gray-700 hover:text-blue-600 text-xs font-semibold group shadow-sm text-left"
                 >
                   <Download size={12} className="text-gray-400 group-hover:text-blue-500 transition-colors" />
-                  <span className="truncate max-w-[220px]">{file.fileName}</span>
-                </a>
+                  <span className="truncate max-w-[220px]">{file.fileName || "View Attachment"}</span>
+                </button>
               ))}
             </div>
           </div>
@@ -188,6 +270,7 @@ function TicketDetailsPage() {
                     <TimelineRow 
                       key={index} 
                       item={item} 
+                      onDownloadRequest={executeSecureDownload} // ✅ Injected 
                     />
                   ))
                 ) : (
@@ -206,10 +289,7 @@ function TicketDetailsPage() {
   );
 }
 
-/* ========================================================= */
-/* TIMELINE TABLE ROW WITH CONDITIONAL RENDERING */
-/* ========================================================= */
-function TimelineRow({ item }: { item: any }) {
+function TimelineRow({ item, onDownloadRequest }: { item: any; onDownloadRequest: any }) {
   const [expanded, setExpanded] = useState(false);
   const isMovement = item.timelineType === "MOVEMENT";
   const hasAttachments = item.attachments && item.attachments.length > 0;
@@ -229,10 +309,10 @@ function TimelineRow({ item }: { item: any }) {
               Queue Move: {item.fromQueueName} ➔ {item.toQueueName}
             </span>
           ) : (
-            <>
+            <div className="whitespace-pre-wrap max-h-16 overflow-hidden line-clamp-2">
               {hasAttachments && <span className="inline-block mr-1.5 text-xs text-slate-400">📎</span>}
               {item.message || <span className="italic text-gray-300">Empty message body</span>}
-            </>
+            </div>
           )}
         </td>
         <td className="p-4">
@@ -268,23 +348,22 @@ function TimelineRow({ item }: { item: any }) {
                   {item.message}
                 </div>
 
+                {/* ✅ FIXED TIMELINE ROW ATTACHMENT ACTION TRIGGERS */}
                 {hasAttachments && (
                   <div className="mt-4 pt-3 border-t border-gray-200/60">
                     <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-2 flex items-center gap-1">
-                      <Paperclip size={12} /> Email Reply Attachments ({item.attachments.length})
+                      <Paperclip size={12} /> Thread Attachments ({item.attachments.length})
                     </div>
                     <div className="flex flex-wrap gap-2">
                       {item.attachments.map((file: any) => (
-                        <a
-                          key={file.id}
-                          href={file.storagePath}
-                          target="_blank"
-                          rel="noopener noreferrer"
+                        <button
+                          key={file.id || file.storagePath}
+                          onClick={(e) => onDownloadRequest(e, file.storagePath, file.fileName)}
                           className="flex items-center gap-2 px-3 py-1.5 bg-white hover:bg-blue-50 border border-gray-200 hover:border-blue-200 rounded-lg transition-all text-gray-700 hover:text-blue-600 text-xs font-semibold shadow-sm text-left"
                         >
                           <Download size={11} className="text-gray-400" />
-                          <span className="truncate max-w-[150px] underline">{file.fileName}</span>
-                        </a>
+                          <span className="truncate max-w-[150px] underline">{file.fileName || "View Attachment"}</span>
+                        </button>
                       ))}
                     </div>
                   </div>
@@ -298,9 +377,6 @@ function TimelineRow({ item }: { item: any }) {
   );
 }
 
-/* ========================================================= */
-/* ACTION PANEL COMPONENT SECTION WITH TEXT-ONLY THREAD REPLY */
-/* ========================================================= */
 function TicketActionButtons({
   ticket,
   onActionSuccess,
@@ -313,7 +389,15 @@ function TicketActionButtons({
   const [memberId, setMemberId] = useState("");
   
   const [replyText, setReplyText] = useState("");
+  const [escalationNotes, setEscalationNotes] = useState(""); 
   const [users, setUsers] = useState<UserDropdown[]>([]);
+
+  const roles = useMemo(() => getUserRoles(), []);
+  const isEscalationManager = useMemo(() => roles.includes("ROLE_ESCALATION_MANAGER"), [roles]);
+
+  const isCurrentlyEscalated = ticket.ticketStatus === "ESCALATED" || ticket.isEscalated;
+
+  const isActionDisabled = submitting || (isCurrentlyEscalated && !isEscalationManager);
 
   useEffect(() => {
     loadDropdownData();
@@ -330,7 +414,7 @@ function TicketActionButtons({
 
   const handleAssignTicket = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!memberId) return;
+    if (!memberId || isActionDisabled) return;
 
     try {
       setSubmitting(true);
@@ -349,7 +433,7 @@ function TicketActionButtons({
   };
 
   const handleCreateResolution = async () => {
-    if (!resolutionText.trim()) return;
+    if (!resolutionText.trim() || isActionDisabled) return;
 
     try {
       setSubmitting(true);
@@ -368,22 +452,48 @@ function TicketActionButtons({
   };
 
   const handleSendAgentReply = async () => {
-    if (!replyText.trim()) return;
+    if (!replyText.trim() || isActionDisabled) return;
     try {
       setSubmitting(true);
-      
-      // ✅ SUCCESS: Dispatches direct clean string payload structure to the text-only endpoint
       await ticketApi.sendReply({
         ticketNumber: ticket.ticketNumber,
         replyMessage: replyText.trim(),
-        attachments: [] // Safely satisfies the backend structure shape signature
+        attachments: [] 
       });
-
       setReplyText("");
       onActionSuccess("Follow-up thread email message logged and dispatched.", "success");
     } catch (err) {
-      console.error("Dispatched pipeline trace breakdown details:", err);
-      onActionSuccess("Inbound context parameter verification crash on backend routing endpoint.", "error");
+      console.error(err);
+      onActionSuccess("Failed to deliver reply mapping.", "error");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleManualEscalation = async () => {
+    if (!escalationNotes.trim() || isCurrentlyEscalated) return;
+    try {
+      setSubmitting(true);
+      const baseUrl = getBackendBaseUrl();
+      
+      const response = await fetch(`${baseUrl}/escalations/${ticket.ticketNumber}/force-escalate`, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${localStorage.getItem("accessToken")}`,
+          "Content-Type": "application/json",
+          "X-Escalation-Notes": btoa(encodeURIComponent(escalationNotes.trim()))
+        }
+      });
+
+      if (response.ok) {
+        setEscalationNotes("");
+        onActionSuccess("Ticket successfully escalated and dispatched onto the Escalation Desk.", "success");
+      } else {
+        onActionSuccess("Failed to process escalation override parameters.", "error");
+      }
+    } catch (err) {
+      console.error("Network exception during routing execution:", err);
+      onActionSuccess("Network exception during routing execution.", "error");
     } finally {
       setSubmitting(false);
     }
@@ -391,21 +501,25 @@ function TicketActionButtons({
 
   return (
     <div className="mt-8 space-y-6">
-      {/* ASSIGN SECTION */}
+      
+      {/* 1. ASSIGN CONTROL BLOCK */}
       {(ticket.ticketStatus === "OPEN" ||
         ticket.ticketStatus === "ASSIGNED" ||
         ticket.ticketStatus === "IN_PROGRESS" ||
-        ticket.ticketStatus === "RE_OPENED") && (
-        <div className="bg-gray-50 border border-gray-200/70 rounded-xl p-5 shadow-inner">
-          <h2 className="text-base font-bold text-gray-800 mb-4">Assign Ticket</h2>
+        ticket.ticketStatus === "RE_OPENED" ||
+        ticket.ticketStatus === "ESCALATED") && (
+        <div className={`border rounded-xl p-5 shadow-inner transition-all ${isActionDisabled ? "bg-gray-100 border-gray-300 opacity-60" : "bg-gray-50 border-gray-200/70"}`}>
+          <h2 className="text-base font-bold text-gray-800 mb-4 flex items-center gap-2">
+            Assign Ticket {isActionDisabled && <Lock size={14} className="text-red-500" />}
+          </h2>
           <form onSubmit={handleAssignTicket} className="flex items-end gap-4 max-w-2xl">
             <div className="flex-1">
               <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Assign Team Member</label>
               <select
                 value={memberId}
                 onChange={(e) => setMemberId(e.target.value)}
-                disabled={submitting}
-                className="w-full border border-gray-300 rounded-xl bg-white px-3 py-2 text-sm outline-none focus:border-blue-500 transition-all disabled:bg-gray-100 disabled:text-gray-400"
+                disabled={isActionDisabled}
+                className="w-full border border-gray-300 rounded-xl bg-white px-3 py-2 text-sm outline-none focus:border-blue-500 transition-all disabled:bg-gray-200 platform-select"
                 required
               >
                 <option value="">Select Team Member</option>
@@ -417,67 +531,114 @@ function TicketActionButtons({
 
             <button
               type="submit"
-              disabled={submitting}
+              disabled={isActionDisabled}
               className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white font-bold px-6 py-2 h-[38px] rounded-xl transition-all shadow-sm text-sm shrink-0"
             >
-              {submitting ? "Assigning..." : "Assign Ticket"}
+              Assign Ticket
             </button>
           </form>
         </div>
       )}
 
-      {/* ✅ CLEAN TEXT-ONLY RE-REPLY BOX FOR EMAIL TREES */}
-      {(ticket.ticketStatus === "ASSIGNED" || ticket.ticketStatus === "IN_PROGRESS") && (
-        <div className="bg-gray-50 border border-gray-200/70 rounded-xl p-5 shadow-inner">
+      {/* 2. CUSTOMER CONVERSATION THREAD BOX */}
+      {(ticket.ticketStatus === "ASSIGNED" || ticket.ticketStatus === "IN_PROGRESS" || ticket.ticketStatus === "RE_OPENED" || ticket.ticketStatus === "ESCALATED") && (
+        <div className={`border rounded-xl p-5 shadow-inner transition-all ${isActionDisabled ? "bg-gray-100 border-gray-300 opacity-60" : "bg-gray-50 border-gray-200/70"}`}>
           <div className="mb-3">
             <h2 className="text-base font-bold text-gray-800 flex items-center gap-2">
               <Send size={16} className="text-blue-600" />
-              Reply to Customer Email Thread
+              Reply to Customer Email Thread {isActionDisabled && <Lock size={14} className="text-red-500" />}
             </h2>
-            <p className="text-xs text-gray-400 font-semibold mt-0.5">
-              Dispatches an outbound message trailing the existing email tree chain. Moves status precisely to <span className="text-indigo-600 font-bold">IN_PROGRESS</span>.
-            </p>
           </div>
 
           <textarea
             value={replyText}
             onChange={(e) => setReplyText(e.target.value)}
-            disabled={submitting}
-            placeholder="Provide clarity instructions or details directly to the customer inbox..."
+            disabled={isActionDisabled}
+            placeholder={isActionDisabled ? "Form locked. Requires Escalation Manager clearance..." : "Provide clarity instructions or details directly..."}
             rows={4}
-            className="w-full border border-gray-300 rounded-xl bg-white p-3 text-sm outline-none focus:border-blue-500 transition-all font-medium disabled:bg-gray-50 disabled:text-gray-400"
+            className="w-full border border-gray-300 rounded-xl bg-white p-3 text-sm outline-none focus:border-blue-500 transition-all font-medium disabled:bg-gray-200"
           />
 
           <div className="mt-4 flex justify-end">
             <button
               onClick={handleSendAgentReply}
-              disabled={submitting || !replyText.trim()}
-              className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white font-bold px-6 py-2.5 rounded-xl transition-all shadow-sm text-xs shrink-0"
+              disabled={isActionDisabled || !replyText.trim()}
+              className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white font-bold px-6 py-2.5 rounded-xl transition-all shadow-sm text-xs"
             >
-              {submitting ? "Sending..." : "Dispatch Trail Reply"}
+              Dispatch Trail Reply
             </button>
           </div>
         </div>
       )}
 
-      {/* RESOLUTION SECTION */}
-      {(ticket.ticketStatus === "ASSIGNED" || ticket.ticketStatus === "IN_PROGRESS") && (
-        <div className="bg-gray-50 border border-gray-200/70 rounded-xl p-5 shadow-inner">
-          <h2 className="text-base font-bold text-gray-800 mb-4">Resolve Ticket</h2>
+      {/* MANUAL OVERRIDE LAUNCH PANEL */}
+      {!isCurrentlyEscalated && ticket.ticketStatus !== "RESOLVED" && (
+        <div className="bg-red-50/40 border border-red-200 rounded-xl p-5 shadow-sm">
+          <div className="mb-3">
+            <h2 className="text-base font-bold text-red-800 flex items-center gap-2">
+              <AlertTriangle size={16} className="text-red-600" /> Force Manual Queue Escalation
+            </h2>
+          </div>
+
+          <textarea
+            value={escalationNotes}
+            onChange={(e) => setEscalationNotes(e.target.value)}
+            disabled={submitting}
+            placeholder="Provide core governance diagnostic reasons..."
+            rows={2}
+            className="w-full border border-red-300 rounded-xl bg-white p-3 text-sm outline-none focus:border-red-500 transition-all font-medium text-gray-800"
+          />
+
+          <div className="mt-3 flex justify-end">
+            <button
+              onClick={handleManualEscalation}
+              disabled={submitting || !escalationNotes.trim()}
+              className="bg-red-600 hover:bg-red-700 disabled:bg-gray-300 text-white font-bold px-5 py-2 rounded-xl transition-all shadow-md text-xs"
+            >
+              Execute Force Escalation
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 3. RESOLUTION BOX */}
+      {(ticket.ticketStatus === "ASSIGNED" || ticket.ticketStatus === "IN_PROGRESS" || ticket.ticketStatus === "RE_OPENED" || ticket.ticketStatus === "ESCALATED") && (
+        <div className={`border rounded-xl p-5 shadow-sm transition-all ${
+          isCurrentlyEscalated 
+            ? isEscalationManager 
+              ? "bg-gradient-to-r from-amber-50 to-orange-50 border-orange-300"
+              : "bg-gray-100 border-gray-300 opacity-70"
+            : "bg-gray-50 border-gray-200"
+        }`}>
+          <h2 className="text-base font-bold text-gray-800 mb-2 flex items-center gap-2">
+            Resolve Ticket 
+            {isCurrentlyEscalated && (
+              <span className={`text-xs px-2 py-0.5 rounded-md font-bold uppercase flex items-center gap-1 ${isEscalationManager ? "bg-green-100 text-green-800 animate-pulse" : "bg-red-100 text-red-800"}`}>
+                {isEscalationManager ? "⚠️ Unlocked for Escalation Manager" : "🔒 Locked - Requires Escalation Manager"}
+              </span>
+            )}
+          </h2>
+          
+          {isCurrentlyEscalated && !isEscalationManager && (
+            <p className="text-xs text-red-600/90 font-medium mb-3 flex items-center gap-1">
+              <Lock size={12} /> Only an authority possessing the <strong>ROLE_ESCALATION_MANAGER</strong> role can resolve this escalated item.
+            </p>
+          )}
+
           <textarea
             value={resolutionText}
             onChange={(e) => setResolutionText(e.target.value)}
-            disabled={submitting}
-            placeholder="Enter resolution details..."
+            disabled={isActionDisabled}
+            placeholder={isActionDisabled ? "Form disabled due to role protection rules..." : "Enter final verification steps and resolution details here..."}
             rows={4}
-            className="w-full border border-gray-300 rounded-xl bg-white p-3 text-sm outline-none focus:border-green-500 transition-all disabled:bg-gray-100 disabled:text-gray-400"
+            className="w-full border border-gray-300 rounded-xl bg-white p-3 text-sm outline-none focus:border-green-500 transition-all disabled:bg-gray-200"
           />
           <button
             onClick={handleCreateResolution}
-            disabled={submitting || !resolutionText.trim()}
+            disabled={isActionDisabled || !resolutionText.trim()}
             className="mt-4 bg-green-600 hover:bg-green-700 disabled:bg-gray-300 text-white font-bold px-5 py-2 rounded-xl transition-all shadow-sm text-sm"
           >
-            {submitting ? "Resolving..." : "Submit Resolution"}
+            Submit Resolution
           </button>
         </div>
       )}
