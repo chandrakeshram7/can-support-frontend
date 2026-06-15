@@ -5,12 +5,20 @@ import {
   Users, 
   Layers, 
   MessageSquare, 
-  Lightbulb 
+  Lightbulb,
+  Radio 
 } from "lucide-react";
 
+// 🎯 Mock session context hook — substitute this with your actual app auth context wrapper (e.g., useAuth())
+const useCurrentUserSession = () => {
+  return { id: 1, username: "chandrakesh", role: "ADMIN" }; 
+};
+
 export default function Sidebar() {
+  const currentUser = useCurrentUserSession();
+
   return (
-    <div className="w-64 border-r bg-white min-h-screen p-4 flex flex-col justify-between">
+    <div className="w-64 border-r bg-white h-screen p-4 flex flex-col justify-between shrink-0 select-none">
       <div>
         {/* Workspace Title */}
         <h1 className="text-2xl font-black tracking-tight text-gray-900 mb-8 px-3">
@@ -59,7 +67,18 @@ export default function Sidebar() {
             Chat
           </Link>
 
-          {/* ✅ NEW KNOWLEDGE BASE SECTOR LINK WITH BULB SYMBOL */}
+          {/* ✅ ONLY SHOW BROADCAST TO ADMIN USERS */}
+          {currentUser?.role === "ADMIN" && (
+            <Link 
+              to="/broadcast" 
+              className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50 hover:text-blue-900 transition-all [&.active]:bg-blue-50 [&.active]:text-blue-600"
+            >
+              <Radio size={18} className="shrink-0 text-gray-500" />
+              Broadcast
+            </Link>
+          )}
+
+          {/* Knowledge Base Sector Link */}
           <Link 
             to="/knowledge-base" 
             className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50 hover:text-amber-600 hover:bg-amber-50/50 transition-all [&.active]:bg-amber-50 [&.active]:text-amber-600"
