@@ -4,7 +4,29 @@ if (typeof global === "undefined") {
 
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { ChevronDown, ChevronRight, CheckCircle2, AlertCircle, Paperclip, Download, ArrowRightLeft, Send, ShieldAlert, AlertTriangle, Lock } from "lucide-react";
+import { 
+  ChevronDown, 
+  ChevronRight, 
+  CheckCircle2, 
+  AlertCircle, 
+  Paperclip, 
+  Download, 
+  ArrowRightLeft, 
+  Send, 
+  ShieldAlert, 
+  AlertTriangle, 
+  Lock, 
+  Clock, 
+  User, 
+  Mail, 
+  FileText, 
+  History, 
+  MessageSquare,
+  BookmarkCheck,
+  Unlock,
+  Maximize2,
+  Minimize2
+} from "lucide-react";
 
 import { ticketApi, UserDropdown } from "@/lib/ticket-api";
 
@@ -46,12 +68,7 @@ function TicketDetailsPage() {
   const { ticketNumber } = Route.useParams();
   const [ticket, setTicket] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-
-  /* SUCCESS / ERROR UI MESSAGE */
-  const [uiMessage, setUiMessage] = useState<{
-    type: "success" | "error";
-    text: string;
-  } | null>(null);
+  const [uiMessage, setUiMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   useEffect(() => {
     if (ticketNumber) {
@@ -109,10 +126,10 @@ function TicketDetailsPage() {
       });
     }
 
-    return items.sort((a, b) => a.sortDate - b.sortDate);
+    // Sort with newest items rendering at the very top of the feed desk
+    return items.sort((a, b) => b.sortDate - a.sortDate);
   }, [ticket]);
 
-  // ✅ PROGRAMMATIC DOWNLOAD HANDLER: Bypasses cross-origin naming blocks completely
   const executeSecureDownload = async (event: React.MouseEvent, storagePath: string, fileName: string) => {
     event.preventDefault();
     try {
@@ -127,253 +144,300 @@ function TicketDetailsPage() {
       document.body.appendChild(hiddenAnchor);
       hiddenAnchor.click();
       
-      // Clean up DOM objects out of thread memory allocation memory spaces
       document.body.removeChild(hiddenAnchor);
       window.URL.revokeObjectURL(localBlobUrl);
     } catch (error) {
       console.error("Local context download hydration exception caught:", error);
-      // Fallback: Attempt opening in standard external window tab space if local stream drops
       window.open(storagePath, "_blank");
     }
   };
 
   if (loading) {
-    return <div className="flex items-center justify-center min-h-screen font-medium text-gray-500">Loading...</div>;
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4 font-sans antialiased">
+        <div className="text-center space-y-2">
+          <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
+          <p className="text-gray-400 text-[10px] font-bold uppercase tracking-wider">Loading contract timeline data...</p>
+        </div>
+      </div>
+    );
   }
 
   if (!ticket) {
-    return <div className="p-6 text-red-500 font-semibold">Ticket not found</div>;
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4 font-sans antialiased text-sm font-semibold text-red-500">
+        Ticket reference node not found in workspace database.
+      </div>
+    );
   }
 
+  const isEscalatedStatus = ticket.ticketStatus === "ESCALATED" || ticket.isEscalated;
+
   return (
-    <div className="p-6 bg-gray-100 min-h-screen font-sans">
-      {/* TOP UI ALERT */}
-      {uiMessage && (
-        <div className={`mb-4 max-w-6xl mx-auto flex items-center gap-3 rounded-xl p-4 shadow-sm text-white transition-all ${
-          uiMessage.type === "success" ? "bg-green-600" : "bg-red-600"
-        }`}>
-          {uiMessage.type === "success" ? <CheckCircle2 size={20} /> : <AlertCircle size={20} />}
-          <span className="font-medium text-sm">{uiMessage.text}</span>
-        </div>
-      )}
-
-      {/* CRITICAL ESCALATION ATTENTION HEADER BANNER */}
-      {(ticket.ticketStatus === "ESCALATED" || ticket.isEscalated) && (
-        <div className="mb-4 max-w-6xl mx-auto flex items-start gap-3 bg-gradient-to-r from-red-600 to-red-700 text-white rounded-2xl p-5 shadow-md animate-pulse">
-          <ShieldAlert size={24} className="shrink-0 mt-0.5" />
-          <div>
-            <h3 className="font-bold text-sm uppercase tracking-wider">This Ticket is Escalated ({ticket.escalationReason || "USER_REQUESTED"})</h3>
-            <p className="text-xs text-red-100 mt-1 font-medium leading-relaxed">
-              Reason Details: {ticket.escalationNotes || "Bypassed standard queue triage layers via escalation matrix thresholds."}
-            </p>
+    <div className="min-h-screen bg-gray-50 p-4 font-sans antialiased text-gray-800">
+      <div className="max-w-6xl mx-auto space-y-3.5">
+        
+        {/* TOP STATUS FEEDBACK ALERTS */}
+        {uiMessage && (
+          <div className={`flex items-center gap-2 rounded-xl px-4 py-2.5 shadow-sm text-white font-bold text-xs transition-all animate-fade-in ${
+            uiMessage.type === "success" ? "bg-green-600" : "bg-red-600"
+          }`}>
+            {uiMessage.type === "success" ? <CheckCircle2 size={15} /> : <AlertCircle size={15} />}
+            <span>{uiMessage.text}</span>
           </div>
-        </div>
-      )}
+        )}
 
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-200/80 p-6 max-w-6xl mx-auto">
-        {/* HEADER */}
-        <div className="flex justify-between items-start border-b border-gray-100 pb-4">
-          <div>
-            <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">{ticket.subject}</h1>
-            <p className="text-gray-400 font-semibold text-xs mt-1 uppercase tracking-wider">{ticket.ticketNumber}</p>
-          </div>
-
-          <div className="flex items-center gap-2">
-            {ticket.reopenCount > 0 && (
-              <span className="px-2.5 py-1 bg-amber-50 text-amber-700 border border-amber-200 rounded-lg text-[11px] font-extrabold tracking-wide uppercase">
-                Reopened Loops: {ticket.reopenCount}/3
-              </span>
-            )}
-
-            <span className={`px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-wide ${
-              ticket.ticketStatus === "OPEN"
-                ? "bg-yellow-100 text-yellow-700"
-                : ticket.ticketStatus === "ASSIGNED"
-                  ? "bg-blue-100 text-blue-700"
-                  : ticket.ticketStatus === "IN_PROGRESS"
-                    ? "bg-indigo-100 text-indigo-700" 
-                    : ticket.ticketStatus === "RESOLVED"
-                      ? "bg-green-100 text-green-700"
-                      : ticket.ticketStatus === "ESCALATED"
-                        ? "bg-red-600 text-white border border-red-700 font-extrabold"
-                        : ticket.ticketStatus === "RE_OPENED"
-                          ? "bg-orange-100 text-orange-700 border border-orange-200"
-                          : "bg-gray-100 text-gray-700"
-            }`}>
-              {ticket.ticketStatus}
-            </span>
-          </div>
-        </div>
-
-        {/* INITIAL ROOT ATTACHMENTS */}
-        {ticket.attachments && ticket.attachments.length > 0 && (
-          <div className="mt-4 p-4 bg-slate-50 rounded-xl border border-slate-200/60">
-            <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2.5 flex items-center gap-1">
-              <Paperclip size={14} /> Initial Mail Attachments ({ticket.attachments.length})
-            </h3>
-            <div className="flex flex-wrap gap-2">
-              {ticket.attachments.map((file: any) => (
-                <button
-                  key={file.id || file.storagePath}
-                  onClick={(e) => executeSecureDownload(e, file.storagePath, file.fileName)}
-                  className="flex items-center gap-2 px-3 py-2 bg-white hover:bg-blue-50/50 border border-gray-200 hover:border-blue-300 rounded-xl transition-all text-gray-700 hover:text-blue-600 text-xs font-semibold group shadow-sm text-left"
-                >
-                  <Download size={12} className="text-gray-400 group-hover:text-blue-500 transition-colors" />
-                  <span className="truncate max-w-[220px]">{file.fileName || "View Attachment"}</span>
-                </button>
-              ))}
+        {/* CRITICAL ESCALATION ATTENTION HEADER BANNER */}
+        {isEscalatedStatus && (
+          <div className="flex items-start gap-3 bg-gradient-to-r from-red-600 to-red-700 text-white rounded-xl p-4 shadow-md border border-red-700 animate-pulse">
+            <ShieldAlert size={20} className="shrink-0 mt-0.5" />
+            <div className="space-y-0.5">
+              <h3 className="font-black text-xs uppercase tracking-wider">SLA Escalation Breach Triggered ({ticket.escalationReason || "USER_REQUESTED"})</h3>
+              <p className="text-[11px] text-red-100 font-medium leading-relaxed">
+                Reason Notes: {ticket.escalationNotes || "Bypassed standard support layers via escalation override rules."}
+              </p>
             </div>
           </div>
         )}
 
-        {/* META PANEL */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mt-6 bg-gray-50/70 border border-gray-100 p-5 rounded-xl">
-          <div>
-            <p className="text-xs uppercase text-gray-400 font-bold tracking-wider">Customer Email</p>
-            <p className="mt-1 font-medium text-gray-700 text-sm">{ticket.customerMail}</p>
-          </div>
-          <div>
-            <p className="text-xs uppercase text-gray-400 font-bold tracking-wider">Assigned Owner</p>
-            <p className="mt-1 font-medium text-gray-700 text-sm">{ticket.assignedMember?.username || "Unassigned"}</p>
-          </div>
-          <div>
-            <p className="text-xs uppercase text-gray-400 font-bold tracking-wider">Created At</p>
-            <p className="mt-1 font-medium text-gray-700 text-sm">{new Date(ticket.createdAt).toLocaleString()}</p>
-          </div>
-        </div>
+        {/* CORE WORKSPACE CONSOLE CANVAS */}
+        <div className="bg-white rounded-xl border border-gray-200/80 shadow-sm p-5 space-y-5">
+          
+          {/* HEADER LAYER DESIGN */}
+          <div className="flex flex-col sm:flex-row justify-between sm:items-start gap-3 border-b border-gray-100 pb-4">
+            <div className="space-y-1">
+              <h1 className="text-xl font-extrabold text-gray-900 tracking-tight leading-snug">{ticket.subject}</h1>
+              <div className="flex items-center gap-2 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                <span className="font-mono bg-gray-100 text-gray-500 px-1 rounded text-[9px]">REF</span>
+                <span>{ticket.ticketNumber}</span>
+              </div>
+            </div>
 
-        {/* ACTIONS PANEL */}
-        <TicketActionButtons
-          ticket={ticket}
-          onActionSuccess={(message, type) => {
-            setUiMessage({ text: message, type });
-            loadTicket(ticket.ticketNumber);
-          }}
-        />
+            <div className="flex items-center gap-2 shrink-0">
+              {ticket.reopenCount > 0 && (
+                <span className="px-2 py-0.5 bg-amber-50 text-amber-700 border border-amber-200 rounded text-[10px] font-black tracking-wide uppercase">
+                  Reopened: {ticket.reopenCount}/3
+                </span>
+              )}
 
-        {/* HISTORY TABLE */}
-        <div className="mt-10">
-          <h2 className="text-2xl font-bold text-gray-800 tracking-tight mb-5">Ticket History</h2>
-          <div className="overflow-x-auto border border-gray-200 rounded-xl bg-white shadow-sm">
-            <table className="w-full border-collapse">
-              <thead className="bg-gray-50/70 text-gray-500 text-xs font-bold uppercase tracking-wider border-b border-gray-200">
-                <tr>
-                  <th className="text-left p-4">Sender / Actor</th>
-                  <th className="text-left p-4">Date</th>
-                  <th className="text-left p-4">Preview</th>
-                  <th className="text-left p-4 w-[120px]">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100 text-sm">
+              <span className={`inline-block px-2.5 py-1 rounded-md text-[10px] font-black tracking-wide uppercase border ${
+                ticket.ticketStatus === "OPEN"
+                  ? "bg-red-50 border-red-200 text-red-700"
+                  : ticket.ticketStatus === "ASSIGNED"
+                    ? "bg-blue-50 border-blue-200 text-blue-700"
+                    : ticket.ticketStatus === "RESOLVED"
+                      ? "bg-emerald-50 border-emerald-200 text-emerald-700"
+                      : ticket.ticketStatus === "ESCALATED"
+                        ? "bg-purple-50 border-purple-200 text-purple-700 font-extrabold"
+                        : "bg-gray-50 border-gray-200 text-gray-600"
+              }`}>{ticket.ticketStatus}</span>
+            </div>
+          </div>
+
+          {/* METADATA PROPERTIES GRID STRIP */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 bg-gray-50/70 border border-gray-200/50 p-3.5 rounded-xl text-xs font-semibold text-gray-600">
+            <div className="space-y-0.5">
+              <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider flex items-center gap-1">
+                <Mail size={11} className="text-gray-400" /> Customer Endpoint
+              </span>
+              <p className="text-gray-800 truncate" title={ticket.customerMail}>{ticket.customerMail}</p>
+            </div>
+            <div className="space-y-0.5">
+              <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider flex items-center gap-1">
+                <User size={11} className="text-gray-400" /> Allocated Account
+              </span>
+              <p className="text-gray-800 capitalize">{ticket.assignedMember?.username || "Unassigned"}</p>
+            </div>
+            <div className="space-y-0.5">
+              <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider flex items-center gap-1">
+                <Clock size={11} className="text-gray-400" /> Creation Timeline
+              </span>
+              <p className="text-gray-800">{new Date(ticket.createdAt).toLocaleString()}</p>
+            </div>
+          </div>
+
+          {/* INITIAL BULK MAIL ATTACHMENTS SUBPANEL */}
+          {ticket.attachments && ticket.attachments.length > 0 && (
+            <div className="p-3 bg-gray-50 border border-gray-200/60 rounded-xl space-y-2">
+              <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1">
+                <Paperclip size={12} /> Ingestion Mail Attachments ({ticket.attachments.length})
+              </h3>
+              <div className="flex flex-wrap gap-2">
+                {ticket.attachments.map((file: any) => (
+                  <button
+                    key={file.id || file.storagePath}
+                    onClick={(e) => executeSecureDownload(e, file.storagePath, file.fileName)}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white hover:bg-blue-50 border border-gray-200 hover:border-blue-200 rounded-lg transition-all text-gray-700 hover:text-blue-600 text-xs font-bold shadow-sm"
+                  >
+                    <Download size={11} className="text-gray-400" />
+                    <span className="truncate max-w-[200px] underline">{file.fileName || "View File"}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* TWO COLUMN DISPOSITION LAYOUT VIEWPORT CONTAINER */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 pt-2 items-start">
+            
+            {/* COLUMN LEFT: REFACTORED HIGH DENSITY LIFECYCLE LEDGER FEED */}
+            <div className="lg:col-span-2 space-y-3">
+              <div className="flex items-center justify-between border-b border-gray-100 pb-2.5 mb-1">
+                <div className="flex items-center gap-1.5">
+                  <History size={14} className="text-gray-400" />
+                  <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Ticket Lifecycle Ledger</h2>
+                </div>
+                <span className="px-2 py-0.5 bg-gray-100 text-gray-600 text-[10px] font-black tracking-wide rounded-md border border-gray-200/60">
+                  {unifiedTimeline.length} entries
+                </span>
+              </div>
+              
+              {/* TIMELINE TIMELINE STREAM ROW CONTAINER BLOCK */}
+              <div className="space-y-3 max-h-[600px] overflow-y-auto pr-1">
                 {unifiedTimeline.length ? (
                   unifiedTimeline.map((item, index) => (
-                    <TimelineRow 
+                    <TimelineCard 
                       key={index} 
                       item={item} 
-                      onDownloadRequest={executeSecureDownload} // ✅ Injected 
+                      onDownloadRequest={executeSecureDownload} 
                     />
                   ))
                 ) : (
-                  <tr>
-                    <td colSpan={4} className="p-8 text-center text-gray-400 font-medium">
-                      No conversation or queue routing actions logged yet.
-                    </td>
-                  </tr>
+                  <div className="border border-dashed border-gray-300 rounded-xl p-8 text-center text-gray-400 font-bold uppercase text-[10px] tracking-wider bg-gray-50/50">
+                    <Inbox size={20} className="text-gray-300 mx-auto mb-1.5" />
+                    No lifecycle ledger parameters recorded yet.
+                  </div>
                 )}
-              </tbody>
-            </table>
+              </div>
+            </div>
+
+            {/* COLUMN RIGHT: INTERACTIVE OPERATION INTERACTION ACTIONS PANEL */}
+            <div className="space-y-4">
+              <div className="flex items-center gap-1.5 border-b border-gray-100 pb-2">
+                <FileText size={14} className="text-gray-400" />
+                <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Triage Execution Panel</h2>
+              </div>
+              <TicketActionButtons
+                ticket={ticket}
+                onActionSuccess={(message, type) => {
+                  setUiMessage({ text: message, type });
+                  loadTicket(ticket.ticketNumber);
+                }}
+              />
+            </div>
+
           </div>
+
         </div>
       </div>
     </div>
   );
 }
 
-function TimelineRow({ item, onDownloadRequest }: { item: any; onDownloadRequest: any }) {
-  const [expanded, setExpanded] = useState(false);
+// ✅ REFACTORED WORKSPACE: Highly responsive, intuitive collapsible timeline block card layout
+function TimelineCard({ item, onDownloadRequest }: { item: any; onDownloadRequest: any }) {
+  const [expanded, setExpanded] = useState<boolean>(false);
   const isMovement = item.timelineType === "MOVEMENT";
   const hasAttachments = item.attachments && item.attachments.length > 0;
 
   return (
-    <>
-      <tr className={`hover:bg-gray-50/60 transition-all group ${isMovement ? "bg-slate-50/40" : ""}`}>
-        <td className="p-4 font-semibold text-blue-600 truncate max-w-[200px]">
-          {isMovement ? `🔄 ${item.movedByUsername}` : item.sender}
-        </td>
-        <td className="p-4 text-xs text-gray-400 font-medium">
-          {new Date(item.sortDate).toLocaleString()}
-        </td>
-        <td className="p-4 text-gray-600 max-w-[350px] truncate font-medium">
-          {isMovement ? (
-            <span className="text-xs text-slate-500 font-semibold">
-              Queue Move: {item.fromQueueName} ➔ {item.toQueueName}
+    <div className={`rounded-xl border transition-all duration-150 overflow-hidden ${
+      isMovement 
+        ? "bg-slate-50/50 border-slate-200/70 shadow-sm" 
+        : "bg-white border-gray-200/80 hover:border-gray-300 shadow-sm"
+    }`}>
+      
+      {/* Upper Interactive Row Header Trigger */}
+      <div 
+        onClick={() => setExpanded(!expanded)}
+        className="p-3 flex items-center justify-between gap-3 cursor-pointer select-none"
+      >
+        <div className="flex items-center gap-2.5 min-w-0 flex-1">
+          <div className={`p-1.5 rounded-lg text-xs font-bold uppercase tracking-wider shrink-0 ${
+            isMovement ? "bg-slate-200/80 text-slate-700" : "bg-blue-50 text-blue-600 border border-blue-100/50"
+          }`}>
+            {isMovement ? "Move" : "Mail"}
+          </div>
+          
+          <div className="truncate min-w-0">
+            <p className="text-xs font-black text-gray-800 truncate capitalize">
+              {isMovement ? item.movedByUsername : item.sender}
+            </p>
+            <div className="flex items-center gap-1 text-[10px] text-gray-400 font-semibold mt-0.5">
+              <Clock size={11} className="text-gray-300" />
+              <span>{new Date(item.sortDate).toLocaleString()}</span>
+              
+              {!isMovement && (
+                <>
+                  <span className="text-gray-200">|</span>
+                  <span className="text-gray-500 truncate max-w-[240px]">
+                    {item.message}
+                  </span>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Dynamic Expand Indicators */}
+        <div className="flex items-center gap-3 shrink-0 pl-1">
+          {hasAttachments && (
+            <span className="text-[10px] font-black bg-blue-50 text-blue-600 border border-blue-100 rounded px-1.5 py-0.5 flex items-center gap-0.5">
+              📎 {item.attachments.length}
             </span>
+          )}
+          <button className="p-1 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-gray-700 transition-colors">
+            {expanded ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
+          </button>
+        </div>
+      </div>
+
+      {/* Collapsible Content Body Segment Panel */}
+      {expanded && (
+        <div className="px-4 pb-3.5 pt-1 border-t border-gray-100 bg-gray-50/30 text-left">
+          {isMovement ? (
+            <div className="space-y-2 mt-1.5">
+              <div className="flex items-center gap-1.5 text-xs text-gray-700 font-bold">
+                <ArrowRightLeft size={13} className="text-blue-500" />
+                <span>Ticket shifted from <span className="text-blue-600">{item.fromQueueName}</span> to <span className="text-blue-600">{item.toQueueName}</span></span>
+              </div>
+              {item.comment && (
+                <p className="text-[11px] bg-white text-gray-500 border rounded-lg p-2.5 italic font-medium leading-relaxed shadow-inner">
+                  Comment Note: "{item.comment}"
+                </p>
+              )}
+            </div>
           ) : (
-            <div className="whitespace-pre-wrap max-h-16 overflow-hidden line-clamp-2">
-              {hasAttachments && <span className="inline-block mr-1.5 text-xs text-slate-400">📎</span>}
-              {item.message || <span className="italic text-gray-300">Empty message body</span>}
+            <div className="space-y-3 mt-1.5">
+              <div className="whitespace-pre-wrap text-xs text-gray-700 leading-relaxed font-medium bg-white border border-gray-200 rounded-xl p-3 shadow-inner max-h-80 overflow-y-auto">
+                {item.message || <span className="italic text-gray-300">No text body logged in this message node.</span>}
+              </div>
+
+              {hasAttachments && (
+                <div className="pt-2 border-t border-gray-100">
+                  <div className="text-[9px] font-bold uppercase tracking-wider text-gray-400 mb-1.5 flex items-center gap-1">
+                    <Paperclip size={11} /> Section Attachments ({item.attachments.length})
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {item.attachments.map((file: any) => (
+                      <button
+                        key={file.id || file.storagePath}
+                        onClick={(e) => onDownloadRequest(e, file.storagePath, file.fileName)}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 bg-white hover:bg-blue-50 border border-gray-200 hover:border-blue-200 rounded-lg transition-all text-gray-700 hover:text-blue-600 text-[11px] font-bold shadow-sm"
+                      >
+                        <Download size={10} className="text-gray-400" />
+                        <span className="truncate max-w-[160px] underline">{file.fileName || "Download file"}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
-        </td>
-        <td className="p-4">
-          <button
-            onClick={() => setExpanded(!expanded)}
-            className="flex items-center gap-1 font-bold text-xs text-blue-600 hover:text-blue-800 transition-colors"
-          >
-            {expanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-            View
-          </button>
-        </td>
-      </tr>
-
-      {/* DETAILED COLLAPSIBLE ROW DRAWER */}
-      {expanded && (
-        <tr className="bg-slate-50/60 border-t border-b border-gray-200/50">
-          <td colSpan={4} className="p-5">
-            {isMovement ? (
-              <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm space-y-2">
-                <div className="flex items-center gap-2 text-sm text-gray-700 font-medium">
-                  <ArrowRightLeft size={16} className="text-blue-500" />
-                  <span>Ticket re-routed from <strong>{item.fromQueueName}</strong> to <strong>{item.toQueueName}</strong> by <strong>{item.movedByUsername}</strong></span>
-                </div>
-                {item.comment && (
-                  <div className="text-xs bg-slate-50 text-gray-500 p-2.5 rounded-lg border italic">
-                    Comment: "{item.comment}"
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="space-y-4">
-                <div className="whitespace-pre-wrap text-sm text-gray-700 leading-relaxed font-medium bg-white border border-gray-200 rounded-xl p-4 shadow-inner">
-                  {item.message}
-                </div>
-
-                {/* ✅ FIXED TIMELINE ROW ATTACHMENT ACTION TRIGGERS */}
-                {hasAttachments && (
-                  <div className="mt-4 pt-3 border-t border-gray-200/60">
-                    <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-2 flex items-center gap-1">
-                      <Paperclip size={12} /> Thread Attachments ({item.attachments.length})
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {item.attachments.map((file: any) => (
-                        <button
-                          key={file.id || file.storagePath}
-                          onClick={(e) => onDownloadRequest(e, file.storagePath, file.fileName)}
-                          className="flex items-center gap-2 px-3 py-1.5 bg-white hover:bg-blue-50 border border-gray-200 hover:border-blue-200 rounded-lg transition-all text-gray-700 hover:text-blue-600 text-xs font-semibold shadow-sm text-left"
-                        >
-                          <Download size={11} className="text-gray-400" />
-                          <span className="truncate max-w-[150px] underline">{file.fileName || "View Attachment"}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </td>
-        </tr>
+        </div>
       )}
-    </>
+
+    </div>
   );
 }
 
@@ -396,7 +460,6 @@ function TicketActionButtons({
   const isEscalationManager = useMemo(() => roles.includes("ROLE_ESCALATION_MANAGER"), [roles]);
 
   const isCurrentlyEscalated = ticket.ticketStatus === "ESCALATED" || ticket.isEscalated;
-
   const isActionDisabled = submitting || (isCurrentlyEscalated && !isEscalationManager);
 
   useEffect(() => {
@@ -499,129 +562,132 @@ function TicketActionButtons({
     }
   };
 
-  return (
-    <div className="mt-8 space-y-6">
-      
-      {/* 1. ASSIGN CONTROL BLOCK */}
-      {(ticket.ticketStatus === "OPEN" ||
-        ticket.ticketStatus === "ASSIGNED" ||
-        ticket.ticketStatus === "IN_PROGRESS" ||
-        ticket.ticketStatus === "RE_OPENED" ||
-        ticket.ticketStatus === "ESCALATED") && (
-        <div className={`border rounded-xl p-5 shadow-inner transition-all ${isActionDisabled ? "bg-gray-100 border-gray-300 opacity-60" : "bg-gray-50 border-gray-200/70"}`}>
-          <h2 className="text-base font-bold text-gray-800 mb-4 flex items-center gap-2">
-            Assign Ticket {isActionDisabled && <Lock size={14} className="text-red-500" />}
-          </h2>
-          <form onSubmit={handleAssignTicket} className="flex items-end gap-4 max-w-2xl">
-            <div className="flex-1">
-              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Assign Team Member</label>
-              <select
-                value={memberId}
-                onChange={(e) => setMemberId(e.target.value)}
-                disabled={isActionDisabled}
-                className="w-full border border-gray-300 rounded-xl bg-white px-3 py-2 text-sm outline-none focus:border-blue-500 transition-all disabled:bg-gray-200 platform-select"
-                required
-              >
-                <option value="">Select Team Member</option>
-                {users.map((user) => (
-                  <option key={user.id} value={user.id}>{user.username}</option>
-                ))}
-              </select>
-            </div>
+  const showInteractionWidgets = 
+    ticket.ticketStatus === "OPEN" ||
+    ticket.ticketStatus === "ASSIGNED" ||
+    ticket.ticketStatus === "IN_PROGRESS" ||
+    ticket.ticketStatus === "RE_OPENED" ||
+    ticket.ticketStatus === "ESCALATED";
 
+  return (
+    <div className="space-y-4">
+      
+      {/* 1. ASSIGN OPERATOR ACTION BLOCK */}
+      {showInteractionWidgets && (
+        <div className={`border rounded-xl p-4 shadow-sm border-gray-200 transition-all ${isActionDisabled ? "bg-gray-100/70 opacity-60" : "bg-white"}`}>
+          <h3 className="text-xs font-bold text-gray-800 mb-3 flex items-center gap-1.5 uppercase tracking-wide">
+            {isActionDisabled ? <Lock size={13} className="text-red-500 shrink-0" /> : <User size={13} className="text-blue-500 shrink-0" />}
+            <span>Re-allocate Ownership</span>
+          </h3>
+          <form onSubmit={handleAssignTicket} className="space-y-2.5">
+            <select
+              value={memberId}
+              onChange={(e) => setMemberId(e.target.value)}
+              disabled={isActionDisabled}
+              className="w-full border border-gray-300 rounded-lg bg-white px-2.5 py-1.5 text-xs font-semibold text-gray-700 outline-none focus:border-blue-500 transition-all h-8 disabled:bg-gray-200"
+              required
+            >
+              <option value="">Select Team Member</option>
+              {users.map((user) => (
+                <option key={user.id} value={user.id}>{user.username}</option>
+              ))}
+            </select>
             <button
               type="submit"
-              disabled={isActionDisabled}
-              className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white font-bold px-6 py-2 h-[38px] rounded-xl transition-all shadow-sm text-sm shrink-0"
+              disabled={isActionDisabled || !memberId}
+              className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-200 text-white font-bold py-1.5 px-4 rounded-lg transition-all shadow-sm text-xs h-8"
             >
-              Assign Ticket
+              Assign Resource
             </button>
           </form>
         </div>
       )}
 
       {/* 2. CUSTOMER CONVERSATION THREAD BOX */}
-      {(ticket.ticketStatus === "ASSIGNED" || ticket.ticketStatus === "IN_PROGRESS" || ticket.ticketStatus === "RE_OPENED" || ticket.ticketStatus === "ESCALATED") && (
-        <div className={`border rounded-xl p-5 shadow-inner transition-all ${isActionDisabled ? "bg-gray-100 border-gray-300 opacity-60" : "bg-gray-50 border-gray-200/70"}`}>
-          <div className="mb-3">
-            <h2 className="text-base font-bold text-gray-800 flex items-center gap-2">
-              <Send size={16} className="text-blue-600" />
-              Reply to Customer Email Thread {isActionDisabled && <Lock size={14} className="text-red-500" />}
-            </h2>
-          </div>
+      {showInteractionWidgets && ticket.ticketStatus !== "OPEN" && (
+        <div className={`border rounded-xl p-4 shadow-sm border-gray-200 transition-all ${isActionDisabled ? "bg-gray-100/70 opacity-60" : "bg-white"}`}>
+          <h3 className="text-xs font-bold text-gray-800 mb-2 flex items-center gap-1.5 uppercase tracking-wide">
+            {isActionDisabled ? <Lock size={13} className="text-red-500 shrink-0" /> : <MessageSquare size={13} className="text-blue-500 shrink-0" />}
+            <span>Dispatch Trail Reply</span>
+          </h3>
 
           <textarea
             value={replyText}
             onChange={(e) => setReplyText(e.target.value)}
             disabled={isActionDisabled}
-            placeholder={isActionDisabled ? "Form locked. Requires Escalation Manager clearance..." : "Provide clarity instructions or details directly..."}
-            rows={4}
-            className="w-full border border-gray-300 rounded-xl bg-white p-3 text-sm outline-none focus:border-blue-500 transition-all font-medium disabled:bg-gray-200"
+            placeholder={isActionDisabled ? "Form locked. Requires Escalation Management token..." : "Type email response thread notes here..."}
+            rows={3}
+            className="w-full border border-gray-300 rounded-lg bg-gray-50/50 p-2.5 text-xs outline-none focus:border-blue-500 focus:bg-white transition-all font-medium placeholder-gray-400 leading-tight resize-none shadow-inner"
           />
 
-          <div className="mt-4 flex justify-end">
+          <div className="mt-2 flex justify-end">
             <button
-              onClick={handleSendAgentReply}
+              onClick={() => handleSendAgentReply()}
               disabled={isActionDisabled || !replyText.trim()}
-              className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white font-bold px-6 py-2.5 rounded-xl transition-all shadow-sm text-xs"
+              className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-200 text-white font-bold px-4 py-1.5 rounded-lg transition-all shadow-sm text-xs h-7"
             >
-              Dispatch Trail Reply
+              Send Message
             </button>
           </div>
         </div>
       )}
 
-      {/* MANUAL OVERRIDE LAUNCH PANEL */}
+      {/* 3. MANUAL OVERRIDE FORCE ESCALATION BOX */}
       {!isCurrentlyEscalated && ticket.ticketStatus !== "RESOLVED" && (
-        <div className="bg-red-50/40 border border-red-200 rounded-xl p-5 shadow-sm">
-          <div className="mb-3">
-            <h2 className="text-base font-bold text-red-800 flex items-center gap-2">
-              <AlertTriangle size={16} className="text-red-600" /> Force Manual Queue Escalation
-            </h2>
-          </div>
+        <div className="bg-red-50/30 border border-red-200/80 rounded-xl p-4 shadow-sm">
+          <h3 className="text-xs font-bold text-red-800 mb-2 flex items-center gap-1.5 uppercase tracking-wide">
+            <AlertTriangle size={13} className="text-red-600 shrink-0" /> Force Manual Escalation
+          </h3>
 
           <textarea
             value={escalationNotes}
             onChange={(e) => setEscalationNotes(e.target.value)}
             disabled={submitting}
-            placeholder="Provide core governance diagnostic reasons..."
+            placeholder="State explicit breach or escalation override reason parameters summary..."
             rows={2}
-            className="w-full border border-red-300 rounded-xl bg-white p-3 text-sm outline-none focus:border-red-500 transition-all font-medium text-gray-800"
+            className="w-full border border-red-200 rounded-lg bg-white p-2.5 text-xs outline-none focus:border-red-500 transition-all font-medium text-gray-800 placeholder-red-300 leading-tight resize-none shadow-sm"
           />
 
-          <div className="mt-3 flex justify-end">
+          <div className="mt-2 flex justify-end">
             <button
               onClick={handleManualEscalation}
               disabled={submitting || !escalationNotes.trim()}
-              className="bg-red-600 hover:bg-red-700 disabled:bg-gray-300 text-white font-bold px-5 py-2 rounded-xl transition-all shadow-md text-xs"
+              className="bg-red-600 hover:bg-red-700 disabled:bg-gray-300 text-white font-bold px-4 py-1.5 rounded-lg transition-all shadow-sm text-xs h-7"
             >
-              Execute Force Escalation
+              Escalate Ticket
             </button>
           </div>
         </div>
       )}
 
-      {/* 3. RESOLUTION BOX */}
-      {(ticket.ticketStatus === "ASSIGNED" || ticket.ticketStatus === "IN_PROGRESS" || ticket.ticketStatus === "RE_OPENED" || ticket.ticketStatus === "ESCALATED") && (
-        <div className={`border rounded-xl p-5 shadow-sm transition-all ${
+      {/* 4. FINAL CLOSURE RESOLUTION BOX */}
+      {showInteractionWidgets && (
+        <div className={`border rounded-xl p-4 shadow-sm transition-all border-gray-200 ${
           isCurrentlyEscalated 
             ? isEscalationManager 
-              ? "bg-gradient-to-r from-amber-50 to-orange-50 border-orange-300"
-              : "bg-gray-100 border-gray-300 opacity-70"
-            : "bg-gray-50 border-gray-200"
+              ? "bg-amber-50/30 border-amber-300"
+              : "bg-gray-100/70 border-gray-200 opacity-60"
+            : "bg-white"
         }`}>
-          <h2 className="text-base font-bold text-gray-800 mb-2 flex items-center gap-2">
-            Resolve Ticket 
+          <h3 className="text-xs font-bold text-gray-800 mb-1.5 flex flex-col gap-1 items-start uppercase tracking-wide">
+            <div className="flex items-center gap-1.5">
+              {isCurrentlyEscalated ? <AlertTriangle size={13} className="text-amber-500" /> : <BookmarkCheck size={13} className="text-emerald-500" />}
+              <span>Resolve Contract Case</span>
+            </div>
+            
             {isCurrentlyEscalated && (
-              <span className={`text-xs px-2 py-0.5 rounded-md font-bold uppercase flex items-center gap-1 ${isEscalationManager ? "bg-green-100 text-green-800 animate-pulse" : "bg-red-100 text-red-800"}`}>
-                {isEscalationManager ? "⚠️ Unlocked for Escalation Manager" : "🔒 Locked - Requires Escalation Manager"}
+              <span className={`text-[9px] px-1.5 py-0.5 rounded font-black tracking-wider uppercase border mt-0.5 inline-flex items-center gap-1 ${
+                isEscalationManager ? "bg-emerald-50 border-emerald-200 text-emerald-700 animate-pulse" : "bg-red-50 border-red-200 text-red-700"
+              }`}>
+                {isEscalationManager ? <Unlock size={10} /> : <Lock size={10} />}
+                {isEscalationManager ? "Unlocked for Escalation Authority" : "SLA Lock Active - Requires Escalation Authority"}
               </span>
             )}
-          </h2>
+          </h3>
           
           {isCurrentlyEscalated && !isEscalationManager && (
-            <p className="text-xs text-red-600/90 font-medium mb-3 flex items-center gap-1">
-              <Lock size={12} /> Only an authority possessing the <strong>ROLE_ESCALATION_MANAGER</strong> role can resolve this escalated item.
+            <p className="text-[10px] text-red-500 font-bold mb-2 leading-tight">
+              Action blocked. Requires active ROLE_ESCALATION_MANAGER token claims mapping parameters.
             </p>
           )}
 
@@ -629,16 +695,16 @@ function TicketActionButtons({
             value={resolutionText}
             onChange={(e) => setResolutionText(e.target.value)}
             disabled={isActionDisabled}
-            placeholder={isActionDisabled ? "Form disabled due to role protection rules..." : "Enter final verification steps and resolution details here..."}
-            rows={4}
-            className="w-full border border-gray-300 rounded-xl bg-white p-3 text-sm outline-none focus:border-green-500 transition-all disabled:bg-gray-200"
+            placeholder={isActionDisabled ? "Locked..." : "Enter final verification completion steps details..."}
+            rows={3}
+            className="w-full border border-gray-300 rounded-lg bg-gray-50/50 p-2.5 text-xs outline-none focus:border-emerald-500 focus:bg-white transition-all font-medium placeholder-gray-400 leading-tight resize-none shadow-inner"
           />
           <button
             onClick={handleCreateResolution}
             disabled={isActionDisabled || !resolutionText.trim()}
-            className="mt-4 bg-green-600 hover:bg-green-700 disabled:bg-gray-300 text-white font-bold px-5 py-2 rounded-xl transition-all shadow-sm text-sm"
+            className="w-full mt-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-200 text-white font-bold py-1.5 px-4 rounded-lg transition-all shadow-sm text-xs h-8"
           >
-            Submit Resolution
+            Close out Ticket
           </button>
         </div>
       )}

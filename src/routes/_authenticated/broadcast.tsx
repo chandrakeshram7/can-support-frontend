@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState, useEffect, useMemo } from "react";
-import { Send, Users, CheckCircle2, AlertCircle, ShieldAlert, Loader2 } from "lucide-react";
+import { Send, Users, CheckCircle2, AlertCircle, ShieldAlert, Loader2, Megaphone, FileText } from "lucide-react";
 import { ticketApi } from "@/lib/ticket-api"; 
 import { notificationsApi } from "@/lib/notifications-api";
 
@@ -40,8 +40,15 @@ function AdminBroadcastPanel() {
     try {
       const base64Url = token.split(".")[1];
       const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
-      const parsed = JSON.parse(window.atob(base64));
-
+      const jsonPayload = decodeURIComponent(
+        window
+          .atob(base64)
+          .split("")
+          .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
+          .join("")
+      );
+      
+      const parsed = JSON.parse(jsonPayload);
       const rawRole = parsed.role || parsed.roles || parsed.authority || "USER";
       let cleanRole = "USER";
 
@@ -131,6 +138,12 @@ function AdminBroadcastPanel() {
       setTitle("");
       setBody("");
       setSelectedUserIds([]);
+
+      // ✅ FIXED: Clear the success notification banner automatically after 4 seconds
+      setTimeout(() => {
+        setUiMessage(null);
+      }, 4000);
+
     } catch (err) {
       console.error("Exception thrown during delivery submission processing:", err);
       setUiMessage({ type: "error", text: "Failed dispatching broadcast configuration routing settings." });
@@ -142,7 +155,7 @@ function AdminBroadcastPanel() {
   // Safe loader tracking fallback block state for server matching
   if (loadingSession) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[80vh] p-6 text-gray-400 font-medium text-xs gap-2 bg-gray-50">
+      <div className="flex flex-col items-center justify-center min-h-[80vh] p-6 text-gray-400 font-medium text-xs gap-2 bg-gray-50 antialiased font-sans">
         <Loader2 size={22} className="animate-spin text-blue-500" />
         <span>Verifying Security Clearance Parameters...</span>
       </div>
@@ -152,17 +165,20 @@ function AdminBroadcastPanel() {
   // 🛡️ Safe check shield: Blocks regular user configurations and Managers immediately
   if (!isAdmin) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[80vh] p-6 text-center bg-gray-50 font-sans">
-        <div className="p-4 bg-amber-50 text-amber-600 rounded-2xl mb-4 shadow-sm border border-amber-100">
-          <ShieldAlert size={40} />
+      <div className="flex flex-col items-center justify-center min-h-[80vh] p-6 text-center bg-gray-50 font-sans antialiased text-gray-800">
+        <div className="p-3 bg-amber-50 text-amber-600 rounded-xl mb-4 shadow-sm border border-amber-200/60 animate-pulse">
+          <ShieldAlert size={36} />
         </div>
-        <h1 className="text-xl font-bold text-gray-900 tracking-tight">System Message Center</h1>
-        <p className="text-sm text-gray-500 max-w-md mt-2 font-medium leading-relaxed">
+        <h1 className="text-xl font-extrabold text-gray-900 tracking-tight">System Message Center</h1>
+        <p className="text-xs text-gray-400 max-w-sm mt-1.5 font-bold uppercase tracking-wider leading-relaxed">
+          Access Denied
+        </p>
+        <p className="text-xs text-gray-500 max-w-sm mt-1 font-semibold leading-relaxed">
           Welcome to the announcement desk hub. Regular profiles and manager accounts can review system updates using the global notification bell icon located on the navigation header bar.
         </p>
         <button
           onClick={() => navigate({ to: "/dashboard" })}
-          className="mt-6 bg-gray-900 hover:bg-gray-800 text-white font-bold text-xs px-6 py-2.5 rounded-xl shadow-md transition-all"
+          className="mt-6 bg-gray-900 hover:bg-gray-800 text-white font-bold text-xs px-5 py-2 rounded-xl shadow-sm transition-all focus:outline-none"
         >
           Return to Dashboard
         </button>
@@ -171,110 +187,129 @@ function AdminBroadcastPanel() {
   }
 
   return (
-    <div className="p-6 bg-gray-100 min-h-screen font-sans">
-      <div className="max-w-4xl mx-auto space-y-6">
+    <div className="min-h-screen bg-gray-50 p-4 font-sans antialiased text-gray-800">
+      <div className="max-w-5xl mx-auto space-y-4">
+        
+        {/* TOP STATUS ALERTS */}
         {uiMessage && (
-          <div className={`flex items-center gap-3 rounded-xl p-4 shadow-sm text-white font-medium text-sm ${
-            uiMessage.type === "success" ? "bg-green-600" : "bg-red-600"
+          <div className={`flex items-center gap-2.5 rounded-xl px-4 py-2.5 shadow-sm text-white font-bold text-xs transition-all alert-dismiss-animation ${
+            uiMessage.type === "success" ? "bg-green-600 animate-fade-in" : "bg-red-600"
           }`}>
-            {uiMessage.type === "success" ? <CheckCircle2 size={20} /> : <AlertCircle size={20} />}
+            {uiMessage.type === "success" ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
             <span>{uiMessage.text}</span>
           </div>
         )}
 
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 flex items-center gap-4">
-          <div className="p-3 bg-red-50 text-red-600 rounded-xl">
-            <ShieldAlert size={26} />
+        {/* COMPACT CORPORATE BRAND HEADER */}
+        <div className="bg-white rounded-xl border border-gray-200/80 shadow-sm p-4 flex items-center gap-3.5">
+          <div className="p-2.5 bg-gradient-to-br from-blue-600 to-indigo-600 text-white rounded-xl shadow-sm shadow-blue-100">
+            <Megaphone size={20} />
           </div>
           <div>
-            <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight">System Notification Broadcast Desk</h1>
-            <p className="text-xs text-gray-400 font-semibold tracking-wide uppercase mt-0.5">Admin Central Governance Engine</p>
+            <h1 className="text-xl font-extrabold text-gray-900 tracking-tight">Broadcast Control Desk</h1>
+            <p className="text-[10px] text-gray-400 font-bold tracking-wider uppercase mt-0.5">Admin Central Governance Engine</p>
           </div>
         </div>
 
-        <form onSubmit={handleSubmitBroadcast} className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="md:col-span-2 bg-white rounded-2xl shadow-sm border border-gray-200 p-6 space-y-4">
-            <h3 className="text-sm font-bold text-gray-800 tracking-wide border-b pb-2">Compose Broadcast Notification</h3>
-            <div className="space-y-1.5">
-              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider">Broadcast Title Banner</label>
+        {/* CORE GRID INTERFACE */}
+        <form onSubmit={handleSubmitBroadcast} className="flex flex-col lg:flex-row gap-4 items-start">
+          
+          {/* COMPACT FORM WORKSPACE */}
+          <div className="w-full lg:flex-1 bg-white rounded-xl border border-gray-200/80 shadow-sm p-4 space-y-4">
+            <div className="flex items-center gap-1.5 border-b border-gray-100 pb-2">
+              <FileText size={14} className="text-blue-500" />
+              <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Compose Announcement Bulletin</h3>
+            </div>
+            
+            <div className="space-y-1">
+              <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider">Broadcast Title Banner</label>
               <input
                 type="text"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="e.g., Planned Maintenance Loop Window"
-                className="w-full border border-gray-300 rounded-xl bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 font-medium transition-all"
+                className="w-full border border-gray-300 rounded-xl bg-gray-50/50 px-3 py-2 text-xs outline-none focus:border-blue-500 focus:bg-white font-semibold transition-all shadow-inner placeholder-gray-400"
                 maxLength={255}
                 required
               />
             </div>
-            <div className="space-y-1.5">
-              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider">Message Content Body Context</label>
+
+            <div className="space-y-1">
+              <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider">Message Content Body Context</label>
               <textarea
                 value={body}
                 onChange={(e) => setBody(e.target.value)}
                 placeholder="Enter detailed announcements, service guidelines, or outage timelines here directly..."
-                rows={8}
-                className="w-full border border-gray-300 rounded-xl bg-white p-3 text-sm outline-none focus:border-blue-500 font-medium transition-all leading-relaxed"
+                rows={9}
+                className="w-full border border-gray-300 rounded-xl bg-gray-50/50 p-3 text-xs outline-none focus:border-blue-500 focus:bg-white font-medium transition-all leading-relaxed shadow-inner placeholder-gray-400 resize-none"
                 required
               />
             </div>
           </div>
 
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 flex flex-col max-h-[440px]">
-            <div className="flex justify-between items-center border-b pb-2 mb-3">
-              <h3 className="text-sm font-bold text-gray-800 tracking-wide flex items-center gap-1.5">
-                <Users size={16} className="text-blue-500" /> Target Recipients
+          {/* COMPACT SIDE RECIPIENTS TARGET PANEL */}
+          <div className="w-full lg:w-72 bg-white rounded-xl border border-gray-200/80 shadow-sm p-4 flex flex-col h-[356px] shrink-0">
+            <div className="flex justify-between items-center border-b border-gray-100 pb-2 mb-2">
+              <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1.5">
+                <Users size={14} className="text-blue-500" /> Target Recipients
               </h3>
               {systemUsers.length > 0 && (
                 <button
                   type="button"
                   onClick={handleSelectAllUsers}
-                  className="text-[11px] font-black text-blue-600 hover:text-blue-800 uppercase focus:outline-none"
+                  className="text-[10px] font-black text-blue-600 hover:text-indigo-700 uppercase focus:outline-none tracking-wider transition-colors"
                 >
                   {selectedUserIds.length === systemUsers.length ? "Deselect All" : "Select All"}
                 </button>
               )}
             </div>
 
-            <div className="flex-1 overflow-y-auto divide-y divide-gray-50 border border-gray-100 rounded-xl px-2">
+            {/* HIGH DENSITY RECIPIENT ROW LOOP */}
+            <div className="flex-1 overflow-y-auto divide-y divide-gray-50 border border-gray-100 rounded-xl px-1.5 bg-gray-50/40">
               {loadingUsers ? (
-                <div className="flex flex-col items-center justify-center py-12 gap-2 text-gray-400 text-xs font-medium">
-                  <Loader2 size={18} className="animate-spin text-blue-500" />
-                  <span>Loading operators data listings...</span>
+                <div className="flex flex-col items-center justify-center py-20 gap-1.5 text-gray-400 text-[11px] font-bold uppercase tracking-wider">
+                  <Loader2 size={16} className="animate-spin text-blue-500" />
+                  <span>Loading operators...</span>
                 </div>
               ) : systemUsers.length > 0 ? (
                 systemUsers.map((user) => {
                   const isChecked = selectedUserIds.includes(user.id);
                   return (
-                    <label key={user.id} className={`flex items-center gap-3 p-3 cursor-pointer rounded-lg my-1 transition-all hover:bg-gray-50/80 ${isChecked ? "bg-blue-50/30" : ""}`}>
+                    <label key={user.id} className={`flex items-center gap-2.5 p-2 cursor-pointer rounded-lg my-1 transition-all border ${
+                      isChecked 
+                        ? "bg-blue-50/40 border-blue-200/70" 
+                        : "bg-transparent border-transparent hover:bg-white hover:border-gray-200"
+                    }`}>
                       <input
                         type="checkbox"
                         checked={isChecked}
                         onChange={() => handleToggleUserSelection(user.id)}
-                        className="rounded text-blue-600 focus:ring-blue-500 h-4 w-4 border-gray-300"
+                        className="rounded text-blue-600 focus:ring-blue-500 h-3.5 w-3.5 border-gray-300 cursor-pointer"
                       />
-                      <div className="text-left">
-                        <p className="text-xs font-bold text-gray-800">{user.username}</p>
-                        {user.email && <p className="text-[10px] text-gray-400 font-medium">{user.email}</p>}
+                      <div className="text-left min-w-0 flex-1">
+                        <p className="text-xs font-bold text-gray-800 truncate capitalize">{user.username}</p>
+                        {user.email && <p className="text-[10px] text-gray-400 font-semibold truncate mt-0.5">{user.email}</p>}
                       </div>
                     </label>
                   );
                 })
               ) : (
-                <p className="text-center text-xs text-gray-400 font-semibold py-12">No system users located.</p>
+                <p className="text-center text-[10px] text-gray-400 font-bold uppercase tracking-wider py-20">No profiles located.</p>
               )}
             </div>
 
-            <div className="pt-4 border-t mt-4">
+            {/* COMPACT CTAS */}
+            <div className="pt-3 border-t border-gray-100 mt-3">
               <button
                 type="submit"
                 disabled={submitting || selectedUserIds.length === 0 || !title.trim() || !body.trim()}
-                className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 disabled:text-gray-500 text-white font-bold py-2.5 px-4 rounded-xl shadow-md transition-all text-xs flex items-center justify-center gap-2 group"
+                className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 disabled:text-gray-500 text-white font-bold py-2 px-4 rounded-xl shadow-sm transition-all text-xs flex items-center justify-center gap-1.5 focus:outline-none"
               >
-                {submitting ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+                {submitting ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
                 <span>Dispatch Broadcast ({selectedUserIds.length})</span>
               </button>
             </div>
+
           </div>
         </form>
       </div>

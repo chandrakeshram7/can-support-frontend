@@ -6,7 +6,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useRef, useState, useMemo } from "react"; 
 import { Client } from "@stomp/stompjs";
 import SockJS from "sockjs-client";
-import { Paperclip, FileText, ExternalLink, Search, UserPlus } from "lucide-react";
+import { Paperclip, FileText, ExternalLink, Search, UserPlus, Send, Inbox, Loader2, Wifi, WifiOff } from "lucide-react";
 
 import { chatApi, ChatMessage } from "@/lib/chat-api";
 import { ticketApi } from "@/lib/ticket-api";
@@ -14,6 +14,14 @@ import { ticketApi } from "@/lib/ticket-api";
 export const Route = createFileRoute("/_authenticated/chat")({
   component: ChatPage,
 });
+
+const getBackendBaseUrl = (): string => {
+  const currentHost = window.location.hostname;
+  if (currentHost === "localhost" || currentHost === "127.0.0.1") {
+    return "http://localhost:8080";
+  }
+  return "https://can-support-backend.onrender.com";
+};
 
 function ChatPage() {
   const [currentUserId, setCurrentUserId] = useState<number | null>(null);
@@ -23,7 +31,7 @@ function ChatPage() {
   const [messageInput, setMessageInput] = useState("");
   const [isConnected, setIsConnected] = useState(false);
 
-  /* ✅ STABLE PRESENCE STATE MAP ARRAY */
+  /* STABLE PRESENCE STATE MAP ARRAY */
   const [onlineUserIds, setOnlineUserIds] = useState<number[]>([]);
 
   /* FILTER & LOOKUP STATES */
@@ -50,7 +58,7 @@ function ChatPage() {
     const token = localStorage.getItem("accessToken");
     if (!token) return;
     try {
-      const payload = JSON.parse(atob(token.split(".")[1]));
+      const payload = JSON.parse(window.atob(token.split(".")[1]));
       const userId = payload.userId || payload.id || payload.sub;
       const parsedId = Number(userId);
       setCurrentUserId(parsedId);
@@ -184,7 +192,6 @@ function ChatPage() {
       statusSubscriptionRef.current.unsubscribe();
     }
 
-    // 1. CHAT MESSAGE MESSAGING STREAM HANDLER
     subscriptionRef.current = stompClientRef.current.subscribe(
       `/topic/messages/${currentUserId}`,
       (message) => {
@@ -218,7 +225,6 @@ function ChatPage() {
       }
     );
 
-    // 2. LIVE PRESENCE TRACKING SUBSCRIPTION
     statusSubscriptionRef.current = stompClientRef.current.subscribe(
       `/topic/users/status`,
       (statusMessage) => {
@@ -261,7 +267,6 @@ function ChatPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
   }, [messages]);
 
-  /* SECURED UPLOADER THROUGH DYNAMIC AP_FETCH PIPELINE MAPPING */
   const handleChatAttachmentUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0) return;
     try {
@@ -282,7 +287,6 @@ function ChatPage() {
     }
   };
 
-  /* Publish Transaction Outbound Handler */
   function sendMessage() {
     if ((!messageInput.trim() && !activeAttachmentUrl) || !selectedUser || !currentUserId) return;
 
@@ -305,7 +309,6 @@ function ChatPage() {
     setActiveAttachmentName(null);
   }
 
-  /* FILTER 24-HOUR MAXIMUM RETENTION AT INTERFACE VIEWPORT */
   const activeValidMessages = useMemo(() => {
     const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
     return messages.filter((msg) => {
@@ -315,22 +318,31 @@ function ChatPage() {
   }, [messages]);
 
   return (
-    <div className="h-screen bg-gray-100 flex overflow-hidden font-sans">
-      {/* SIDEBAR PANEL */}
-      <div className="w-[320px] bg-white border-r border-gray-200 flex flex-col z-20">
-        <div className="p-5 border-b border-gray-100 space-y-4">
+    <div className="h-[calc(100vh-4rem)] bg-gray-50 flex overflow-hidden font-sans antialiased text-gray-800 rounded-xl border border-gray-200/80 shadow-sm">
+      
+      {/* LEFT PINNED PANEL: CHAT LIST DIRECTORY */}
+      <div className="w-72 bg-white border-r border-gray-200 flex flex-col z-20 shrink-0">
+        
+        {/* SIDEBAR HEADER UNIT */}
+        <div className="p-4 border-b border-gray-100 space-y-3">
           <div className="flex items-center justify-between">
-            <h1 className="text-2xl font-bold text-gray-800 tracking-tight">Messages</h1>
-            <div className="flex items-center gap-1.5 text-xs">
-              <span className={`w-2 h-2 rounded-full ${isConnected ? "bg-emerald-500 animate-pulse" : "bg-amber-500"}`} />
-              <span className="font-semibold text-gray-500">{isConnected ? "Live" : "Offline"}</span>
+            <h1 className="text-base font-extrabold text-gray-900 tracking-tight">Active Threads</h1>
+            <div className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider bg-gray-50 px-2 py-0.5 rounded-md border">
+              {isConnected ? (
+                <Wifi size={11} className="text-emerald-500 animate-pulse" />
+              ) : (
+                <WifiOff size={11} className="text-amber-500" />
+              )}
+              <span className={isConnected ? "text-emerald-600" : "text-amber-600"}>
+                {isConnected ? "Live Connection" : "Reconnecting"}
+              </span>
             </div>
           </div>
 
-          {/* SEARCH & DIRECTORY ENTRY INPUT */}
+          {/* DENSE AUTOCOMPLETE SYSTEM LOOKUP */}
           <div className="relative" ref={dropdownRef}>
-            <div className="relative flex items-center bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 focus-within:border-blue-500 focus-within:bg-white transition-all">
-              <Search size={16} className="text-gray-400 mr-2 shrink-0" />
+            <div className="relative flex items-center bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1.5 focus-within:border-blue-500 focus-within:bg-white transition-all h-8">
+              <Search size={13} className="text-gray-400 mr-1.5 shrink-0" />
               <input
                 type="text"
                 value={userSearchQuery}
@@ -339,30 +351,30 @@ function ChatPage() {
                   setUserSearchQuery(e.target.value);
                   setShowDropdown(true);
                 }}
-                placeholder="Search directory to add users..."
-                className="w-full bg-transparent text-sm font-medium outline-none text-gray-800"
+                placeholder="Search team workspace directory..."
+                className="w-full bg-transparent text-xs font-semibold outline-none text-gray-800 placeholder-gray-400"
               />
             </div>
 
-            {/* DIRECTORY SEARCH OVERLAY RESULTS DROPDOWN */}
+            {/* FLOATING DROPDOWN SEARCH INTERCEPTOR */}
             {showDropdown && userSearchQuery.trim() !== "" && (
-              <div className="absolute top-full left-0 right-0 mt-1.5 bg-white border border-gray-200 shadow-xl rounded-xl max-h-64 overflow-y-auto overflow-hidden z-50">
+              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 shadow-xl rounded-lg max-h-48 overflow-y-auto z-50 divide-y divide-gray-50 border-t-2 border-blue-500">
                 {globalSearchMatches.length === 0 ? (
-                  <div className="p-4 text-xs font-semibold text-center text-gray-400 italic">No teammates match your lookup</div>
+                  <div className="p-3 text-[10px] font-bold text-center text-gray-400 uppercase tracking-wide italic">No matches found</div>
                 ) : (
                   globalSearchMatches.map((user) => (
                     <button
                       key={user.id}
                       onClick={() => handleAddUserToChats(user)}
-                      className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50 text-left transition-colors border-b border-gray-50 last:border-0"
+                      className="w-full px-3 py-2 flex items-center justify-between hover:bg-gray-50 text-left transition-colors"
                     >
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <div className="w-8 h-8 rounded-full bg-slate-800 text-white flex items-center justify-center font-bold text-xs uppercase shrink-0">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className="w-6 h-6 rounded-md bg-gray-900 text-white flex items-center justify-center font-black text-[10px] uppercase shrink-0">
                           {user.username?.charAt(0)}
                         </div>
-                        <div className="text-sm font-bold text-gray-800 truncate">{user.username}</div>
+                        <div className="text-xs font-bold text-gray-800 truncate capitalize">{user.username}</div>
                       </div>
-                      <UserPlus size={14} className="text-blue-500 shrink-0 ml-2" />
+                      <UserPlus size={12} className="text-blue-500 shrink-0" />
                     </button>
                   ))
                 )}
@@ -371,46 +383,52 @@ function ChatPage() {
           </div>
         </div>
 
-        {/* ACTIVE USERS SIDEBAR THREADS LIST */}
-        <div className="flex-1 overflow-y-auto divide-y divide-gray-50">
+        {/* HIGH-DENSITY SIDEBAR ROSTER STREAMS */}
+        <div className="flex-1 overflow-y-auto divide-y divide-gray-50 bg-white">
           {sidebarVisibleUsers.length === 0 ? (
-            <div className="p-8 text-center text-xs font-medium text-gray-400 leading-relaxed italic">
-              Your message roster is currently empty.<br />Use the lookup bar above to add team members.
+            <div className="p-6 text-center text-[10px] font-bold text-gray-400 uppercase tracking-wider leading-relaxed bg-gray-50/20">
+              <Inbox size={16} className="text-gray-300 mx-auto mb-1.5" />
+              <span>Roster index is empty</span>
             </div>
           ) : (
             sidebarVisibleUsers.map((user) => {
               const count = unreadCounts[user.id] || 0;
               const isUserOnline = onlineUserIds.includes(Number(user.id));
+              const isSelected = selectedUser?.id === user.id;
 
               return (
                 <button
                   key={user.id}
                   onClick={() => setSelectedUser(user)}
-                  className={`w-full px-5 py-4 flex items-center gap-3 transition-all text-left ${
-                    selectedUser?.id === user.id ? "bg-blue-50/70" : ""
+                  className={`w-full px-4 py-3 flex items-center gap-2.5 transition-all text-left relative overflow-hidden border-l-2 ${
+                    isSelected 
+                      ? "bg-blue-50/40 border-blue-600 shadow-inner" 
+                      : "border-transparent hover:bg-gray-50/50"
                   }`}
                 >
                   <div className="relative shrink-0">
-                    <div className="w-11 h-11 rounded-full bg-slate-800 text-white flex items-center justify-center font-bold text-sm uppercase">
+                    <div className="w-8 h-8 rounded-lg bg-slate-800 text-white flex items-center justify-center font-black text-xs uppercase shadow-sm">
                       {user.username?.charAt(0)}
                     </div>
                     
-                    <span className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-white ${
-                      isUserOnline ? "bg-emerald-500 animate-pulse" : "bg-gray-300"
+                    <span className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white shadow-sm ${
+                      isUserOnline ? "bg-emerald-500" : "bg-gray-300"
                     }`} />
-
-                    {count > 0 && (
-                      <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] w-5 h-5 rounded-full flex items-center justify-center font-extrabold border-2 border-white animate-bounce">
-                        {count}
-                      </span>
-                    )}
                   </div>
+                  
                   <div className="min-w-0 flex-1">
-                    <div className={`text-sm truncate ${count > 0 ? "font-extrabold text-black" : "font-semibold text-gray-800"}`}>
-                      {user.username}
+                    <div className="flex items-center justify-between gap-1">
+                      <div className={`text-xs truncate ${count > 0 ? "font-black text-black" : "font-bold text-gray-800 capitalize"}`}>
+                        {user.username}
+                      </div>
+                      {count > 0 && (
+                        <span className="bg-red-600 text-white text-[9px] font-black h-4 px-1.5 rounded-full flex items-center justify-center shadow-sm">
+                          {count}
+                        </span>
+                      )}
                     </div>
-                    <div className="text-xs text-gray-400 truncate mt-0.5">
-                      {count > 0 ? "📩 New message received" : isUserOnline ? "🟢 Active now" : "Offline"}
+                    <div className="text-[10px] text-gray-400 font-medium truncate mt-0.5">
+                      {count > 0 ? "📩 Unread message" : isUserOnline ? "Active now" : "Offline"}
                     </div>
                   </div>
                 </button>
@@ -420,68 +438,75 @@ function ChatPage() {
         </div>
       </div>
 
-      {/* VIEWPORT AREA */}
+      {/* RIGHT MAIN CANVAS AREA: ACTIVE CONVERSATION SHEET */}
       <div className="flex-1 flex flex-col bg-gray-50 relative z-10">
         {!selectedUser ? (
-          <div className="flex-1 flex items-center justify-center text-gray-400 font-medium">
-            Select a team member from the directory list to start communicating.
+          <div className="flex-1 flex flex-col items-center justify-center text-gray-400 font-bold uppercase tracking-wider text-[10px] gap-1 select-none">
+            <Inbox size={22} className="text-gray-300" />
+            <span>Select a conversation room thread</span>
           </div>
         ) : (
           <>
-            <div className="bg-white border-b border-gray-200 px-6 py-4 flex items-center gap-3 shadow-sm">
-              <div className="w-10 h-10 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold uppercase shrink-0">
-                {selectedUser.username?.charAt(0)}
-              </div>
-              <div>
-                <div className="font-bold text-gray-800 text-base">{selectedUser.username}</div>
-                
-                {onlineUserIds.includes(Number(selectedUser.id)) ? (
-                  <div className="text-xs text-emerald-500 font-bold flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block animate-pulse" />
-                    Online
-                  </div>
-                ) : (
-                  <div className="text-xs text-gray-400 font-semibold flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-gray-300 inline-block" />
-                    Offline
-                  </div>
-                )}
+            {/* ROOM HEADER CARD CONSOLE */}
+            <div className="bg-white border-b border-gray-200 px-5 py-3 flex items-center justify-between shadow-sm shrink-0">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center font-black text-xs uppercase shadow-sm">
+                  {selectedUser.username?.charAt(0)}
+                </div>
+                <div className="min-w-0">
+                  <div className="font-extrabold text-gray-900 text-sm truncate capitalize leading-tight">{selectedUser.username}</div>
+                  
+                  {onlineUserIds.includes(Number(selectedUser.id)) ? (
+                    <div className="text-[10px] text-emerald-500 font-bold flex items-center gap-1 mt-0.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block animate-pulse" />
+                      Active Operations
+                    </div>
+                  ) : (
+                    <div className="text-[10px] text-gray-400 font-bold flex items-center gap-1 mt-0.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-gray-300 inline-block" />
+                      Offline
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
-            {/* MESSAGES BUBBLE SCREEN */}
-            <div className="flex-1 overflow-y-auto p-6 space-y-3.5">
+            {/* MESSAGES DISPLAY GRID CANVAS CONTAINER */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-2">
               {activeValidMessages.map((msg: any) => {
                 const isMine = Number(msg.senderId) === Number(currentUserId);
                 const textContent = typeof msg.message === "string" ? msg.message : msg.message?.message || "";
 
                 return (
-                  <div key={msg.id} className={`flex ${isMine ? "justify-end" : "justify-start"}`}>
-                    <div className={`max-w-[65%] px-4 py-2.5 rounded-2xl shadow-sm text-sm ${
-                      isMine ? "bg-blue-600 text-white rounded-br-none" : "bg-white text-gray-800 rounded-bl-none border border-gray-200"
+                  <div key={msg.id} className={`flex w-full ${isMine ? "justify-end" : "justify-start"}`}>
+                    <div className={`max-w-[70%] px-3 py-2 rounded-xl shadow-sm text-xs border relative flex flex-col gap-1 ${
+                      isMine 
+                        ? "bg-blue-600 border-blue-700 text-white rounded-tr-none text-right items-end" 
+                        : "bg-white border-gray-200/60 text-gray-800 rounded-tl-none text-left items-start"
                     }`}>
-                      <div className="break-words font-medium">{textContent}</div>
+                      <div className="break-words font-semibold max-w-full leading-relaxed">{textContent}</div>
                       
+                      {/* IN-LINE STYLED ATTACHMENT ACTION BAR */}
                       {msg.attachmentUrl && (
-                        <div className="mt-2 pt-2 border-t border-slate-200/20 flex items-center gap-2">
-                          <FileText size={16} />
-                          {/* ✅ FIXED DYNAMIC DOWNLOAD ANCHOR: Safely reads and preserves .xlsx, .docx, and .pdf file type layouts */}
+                        <div className={`pt-1.5 border-t w-full flex items-center gap-1.5 text-[11px] font-bold ${
+                          isMine ? "border-white/10" : "border-gray-100"
+                        }`}>
+                          <FileText size={13} className={isMine ? "text-blue-200" : "text-gray-400"} />
                           <a 
                             href={msg.attachmentUrl} 
                             download={msg.attachmentName || "download"}
-                            className="underline text-xs font-bold flex items-center gap-0.5 text-blue-200 hover:text-white transition-colors"
+                            className={`underline truncate max-w-[180px] inline-flex items-center gap-0.5 ${
+                              isMine ? "text-blue-100 hover:text-white" : "text-blue-600 hover:text-blue-800"
+                            }`}
                             onClick={(e) => {
                               if (msg.attachmentUrl.includes('/raw/')) {
                                 e.preventDefault();
-                                
                                 const resolvedName = msg.attachmentName || "document";
                                 let targetExtension = "";
-                                
                                 if (!resolvedName.includes(".")) {
                                   const urlParts = msg.attachmentUrl.split(".");
                                   targetExtension = urlParts.length > 1 ? `.${urlParts.pop()}` : "";
                                 }
-
                                 const finalDownloadName = resolvedName.endsWith(targetExtension) 
                                   ? resolvedName 
                                   : `${resolvedName}${targetExtension}`;
@@ -498,15 +523,17 @@ function ChatPage() {
                                     window.URL.revokeObjectURL(blobUrl);
                                     virtualLink.remove();
                                   })
-                                  .catch(err => console.error("Blob proxy download stream error context trace:", err));
+                                  .catch(err => console.error("Blob download pipeline exception caught:", err));
                               }
                             }}
                           >
-                            {msg.attachmentName || "View Attachment"} <ExternalLink size={12} />
+                            <span>{msg.attachmentName || "View Document"}</span>
+                            <ExternalLink size={10} className="shrink-0" />
                           </a>
                         </div>
                       )}
-                      <div className={`text-[10px] font-medium text-right mt-1 font-sans ${isMine ? "text-blue-100" : "text-gray-400"}`}>
+                      
+                      <div className={`text-[9px] font-bold font-sans ${isMine ? "text-blue-200" : "text-gray-400"}`}>
                         {msg.createdAt ? new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ""}
                       </div>
                     </div>
@@ -516,18 +543,18 @@ function ChatPage() {
               <div ref={messagesEndRef} />
             </div>
 
-            {/* ATTACHMENT BUFFER STATUS STRIP */}
+            {/* STAGED ATTACHMENT PIPELINE STRIP */}
             {activeAttachmentName && (
-              <div className="bg-blue-50 border-t border-blue-200 px-6 py-2 flex items-center justify-between text-xs font-bold text-blue-700">
-                <span>📎 Staged Document: {activeAttachmentName}</span>
-                <button onClick={() => { setActiveAttachmentUrl(null); setActiveAttachmentName(null); }} className="text-red-500 hover:underline">Remove</button>
+              <div className="bg-blue-50/70 border-t border-blue-200 px-5 py-1.5 flex items-center justify-between text-[11px] font-bold text-blue-700">
+                <span className="flex items-center gap-1">📎 Staged File Buffer: <span className="underline font-mono">{activeAttachmentName}</span></span>
+                <button onClick={() => { setActiveAttachmentUrl(null); setActiveAttachmentName(null); }} className="text-red-500 hover:text-red-700 uppercase text-[10px] font-black focus:outline-none">Remove</button>
               </div>
             )}
 
-            {/* INTERACTION PANEL FOOTER */}
-            <div className="bg-white border-t border-gray-200 p-4 flex gap-3 shadow-md items-center">
-              <label className={`p-2.5 rounded-xl border border-gray-300 bg-gray-50 text-gray-500 cursor-pointer hover:bg-gray-100 transition-all ${uploading ? "opacity-40 animate-pulse" : ""}`}>
-                <Paperclip size={18} />
+            {/* INTERACTION PANEL FOOTER CONTROLS */}
+            <div className="bg-white border-t border-gray-200 p-3 flex gap-2 shadow-inner items-center shrink-0">
+              <label className={`p-2 rounded-xl border border-gray-300 bg-gray-50 text-gray-500 cursor-pointer hover:bg-gray-100 hover:text-gray-700 transition-all shrink-0 h-9 w-9 flex items-center justify-center shadow-sm ${uploading ? "opacity-40 animate-pulse pointer-events-none" : ""}`}>
+                {uploading ? <Loader2 size={15} className="animate-spin text-blue-500" /> : <Paperclip size={15} />}
                 <input type="file" disabled={!isConnected || uploading} onChange={handleChatAttachmentUpload} className="hidden" />
               </label>
 
@@ -535,16 +562,18 @@ function ChatPage() {
                 value={messageInput}
                 onChange={(e) => setMessageInput(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter") sendMessage(); }}
-                placeholder={uploading ? "Uploading attachment..." : "Write a message..."}
+                placeholder={uploading ? "Uploading staged binary file stream..." : "Type conversation message thread entries..."}
                 disabled={!isConnected || uploading}
-                className="flex-1 border border-gray-300 rounded-xl bg-gray-50 px-4 py-3 text-sm outline-none transition-all focus:border-blue-500 focus:bg-white"
+                className="flex-1 border border-gray-300 rounded-xl bg-gray-50 px-3.5 py-1.5 text-xs font-semibold outline-none transition-all focus:border-blue-500 focus:bg-white h-9 text-gray-800 placeholder-gray-400 shadow-inner"
               />
+              
               <button
                 onClick={sendMessage}
                 disabled={!isConnected || uploading || (!messageInput.trim() && !activeAttachmentUrl)}
-                className="bg-blue-600 text-white font-semibold text-sm h-[46px] px-6 rounded-xl hover:bg-blue-700 disabled:bg-gray-100"
+                className="bg-blue-600 text-white font-black text-xs px-4 h-9 rounded-xl hover:bg-blue-700 disabled:bg-gray-100 disabled:text-gray-400 transition-all flex items-center gap-1 shadow-sm focus:outline-none uppercase tracking-wider shrink-0"
               >
-                Send
+                <span>Send</span>
+                <Send size={11} />
               </button>
             </div>
           </>
