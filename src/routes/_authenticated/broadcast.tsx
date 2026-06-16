@@ -14,14 +14,11 @@ interface DropdownUser {
   email?: string;
 }
 
-// 🎯 Hook to pull current profile credentials context
-const useCurrentUserSession = () => {
-  return useMemo(() => ({ id: 1, username: "chandrakesh", role: "ADMIN" }), []); 
-};
-
 function AdminBroadcastPanel() {
-  const currentUser = useCurrentUserSession();
   const navigate = useNavigate();
+
+  const [currentUser, setCurrentUser] = useState<{ id: number; role: string } | null>(null);
+  const [loadingSession, setLoadingSession] = useState<boolean>(true);
 
   const [systemUsers, setSystemUsers] = useState<DropdownUser[]>([]);
   const [selectedUserIds, setSelectedUserIds] = useState<number[]>([]);
@@ -32,56 +29,75 @@ function AdminBroadcastPanel() {
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [uiMessage, setUiMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
+  // Parse claims from active token securely on initial component load-pass
   useEffect(() => {
-    let isMounted = true;
+    const token = window.localStorage.getItem("accessToken");
+    if (!token) {
+      setLoadingSession(false);
+      return;
+    }
 
+    try {
+      const base64Url = token.split(".")[1];
+      const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
+      const parsed = JSON.parse(window.atob(base64));
+
+      const rawRole = parsed.role || parsed.roles || parsed.authority || "USER";
+      let cleanRole = "USER";
+
+      // Secure array structural checking guards
+      if (Array.isArray(rawRole)) {
+        const firstElement = rawRole[0];
+        if (typeof firstElement === "string") {
+          cleanRole = firstElement;
+        } else if (firstElement && typeof firstElement === "object" && firstElement.authority) {
+          cleanRole = firstElement.authority;
+        }
+      } else if (typeof rawRole === "object" && rawRole.authority) {
+        cleanRole = rawRole.authority;
+      } else if (typeof rawRole === "string") {
+        cleanRole = rawRole;
+      }
+
+      cleanRole = String(cleanRole).toUpperCase().replace("ROLE_", "").trim();
+
+      setCurrentUser({
+        id: parsed.id || parsed.userId || (parsed.sub && !isNaN(Number(parsed.sub)) ? Number(parsed.sub) : 1),
+        role: cleanRole,
+      });
+    } catch (e) {
+      console.error("Security parsing error within token handler configuration bounds:", e);
+    } finally {
+      setLoadingSession(false);
+    }
+  }, []);
+
+  // 🛡️ STRICT RULE CHECKING BOUNDARY: Evaluates true ONLY if role string matches ADMIN exactly
+  const isAdmin = useMemo(() => {
+    return currentUser !== null && currentUser.role === "ADMIN";
+  }, [currentUser]);
+
+  useEffect(() => {
+    if (loadingSession || !isAdmin) return;
+    
+    let isMounted = true;
     const fetchAvailableUsers = async () => {
       try {
         setLoadingUsers(true);
         const res = await ticketApi.getAllUsers();
         if (!isMounted) return;
-
         const userData = Array.isArray(res) ? res : res.data || res.content || [];
         setSystemUsers(userData);
       } catch (err) {
-        console.error("Failed fetching user accounts directory:", err);
-        if (isMounted) {
-          setUiMessage({ type: "error", text: "Failed loading active personnel list." });
-        }
+        console.error("Failed fetching database recipients listings:", err);
       } finally {
         if (isMounted) setLoadingUsers(false);
       }
     };
 
-    if (currentUser?.role === "ADMIN") {
-      fetchAvailableUsers();
-    }
-
-    return () => {
-      isMounted = false;
-    };
-  }, [currentUser?.role]);
-
-  // 🛡️ SECURITY GUARD: Non-Admin users only see the System Message Center view layout
-  if (currentUser?.role !== "ADMIN") {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[80vh] p-6 text-center bg-gray-50 font-sans">
-        <div className="p-4 bg-amber-50 text-amber-600 rounded-2xl mb-4 shadow-sm border border-amber-100">
-          <ShieldAlert size={40} />
-        </div>
-        <h1 className="text-xl font-bold text-gray-900 tracking-tight">System Message Center</h1>
-        <p className="text-sm text-gray-500 max-w-md mt-2 font-medium leading-relaxed">
-          Welcome to the announcement desk hub. Regular profiles can review system notices and alerts using the global notification bell icon located on your navigation header bar.
-        </p>
-        <button
-          onClick={() => navigate({ to: "/dashboard" })}
-          className="mt-6 bg-gray-900 hover:bg-gray-800 text-white font-bold text-xs px-6 py-2.5 rounded-xl shadow-md transition-all"
-        >
-          Return to Dashboard
-        </button>
-      </div>
-    );
-  }
+    fetchAvailableUsers();
+    return () => { isMounted = false; };
+  }, [loadingSession, isAdmin]);
 
   const handleToggleUserSelection = (userId: number) => {
     setSelectedUserIds((prev) =>
@@ -123,12 +139,42 @@ function AdminBroadcastPanel() {
     }
   };
 
+  // Safe loader tracking fallback block state for server matching
+  if (loadingSession) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[80vh] p-6 text-gray-400 font-medium text-xs gap-2 bg-gray-50">
+        <Loader2 size={22} className="animate-spin text-blue-500" />
+        <span>Verifying Security Clearance Parameters...</span>
+      </div>
+    );
+  }
+
+  // 🛡️ Safe check shield: Blocks regular user configurations and Managers immediately
+  if (!isAdmin) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[80vh] p-6 text-center bg-gray-50 font-sans">
+        <div className="p-4 bg-amber-50 text-amber-600 rounded-2xl mb-4 shadow-sm border border-amber-100">
+          <ShieldAlert size={40} />
+        </div>
+        <h1 className="text-xl font-bold text-gray-900 tracking-tight">System Message Center</h1>
+        <p className="text-sm text-gray-500 max-w-md mt-2 font-medium leading-relaxed">
+          Welcome to the announcement desk hub. Regular profiles and manager accounts can review system updates using the global notification bell icon located on the navigation header bar.
+        </p>
+        <button
+          onClick={() => navigate({ to: "/dashboard" })}
+          className="mt-6 bg-gray-900 hover:bg-gray-800 text-white font-bold text-xs px-6 py-2.5 rounded-xl shadow-md transition-all"
+        >
+          Return to Dashboard
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="p-6 bg-gray-100 min-h-screen font-sans">
       <div className="max-w-4xl mx-auto space-y-6">
-        
         {uiMessage && (
-          <div className={`flex items-center gap-3 rounded-xl p-4 shadow-sm text-white font-medium text-sm transition-all ${
+          <div className={`flex items-center gap-3 rounded-xl p-4 shadow-sm text-white font-medium text-sm ${
             uiMessage.type === "success" ? "bg-green-600" : "bg-red-600"
           }`}>
             {uiMessage.type === "success" ? <CheckCircle2 size={20} /> : <AlertCircle size={20} />}
@@ -149,7 +195,6 @@ function AdminBroadcastPanel() {
         <form onSubmit={handleSubmitBroadcast} className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="md:col-span-2 bg-white rounded-2xl shadow-sm border border-gray-200 p-6 space-y-4">
             <h3 className="text-sm font-bold text-gray-800 tracking-wide border-b pb-2">Compose Broadcast Notification</h3>
-            
             <div className="space-y-1.5">
               <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider">Broadcast Title Banner</label>
               <input
@@ -162,7 +207,6 @@ function AdminBroadcastPanel() {
                 required
               />
             </div>
-
             <div className="space-y-1.5">
               <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider">Message Content Body Context</label>
               <textarea
@@ -202,12 +246,7 @@ function AdminBroadcastPanel() {
                 systemUsers.map((user) => {
                   const isChecked = selectedUserIds.includes(user.id);
                   return (
-                    <label
-                      key={user.id}
-                      className={`flex items-center gap-3 p-3 cursor-pointer rounded-lg my-1 transition-all hover:bg-gray-50/80 ${
-                        isChecked ? "bg-blue-50/30" : ""
-                      }`}
-                    >
+                    <label key={user.id} className={`flex items-center gap-3 p-3 cursor-pointer rounded-lg my-1 transition-all hover:bg-gray-50/80 ${isChecked ? "bg-blue-50/30" : ""}`}>
                       <input
                         type="checkbox"
                         checked={isChecked}
@@ -232,11 +271,7 @@ function AdminBroadcastPanel() {
                 disabled={submitting || selectedUserIds.length === 0 || !title.trim() || !body.trim()}
                 className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 disabled:text-gray-500 text-white font-bold py-2.5 px-4 rounded-xl shadow-md transition-all text-xs flex items-center justify-center gap-2 group"
               >
-                {submitting ? (
-                  <Loader2 size={14} className="animate-spin" />
-                ) : (
-                  <Send size={14} className="group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
-                )}
+                {submitting ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
                 <span>Dispatch Broadcast ({selectedUserIds.length})</span>
               </button>
             </div>

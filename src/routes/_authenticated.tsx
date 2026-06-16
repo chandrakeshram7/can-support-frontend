@@ -2,7 +2,6 @@ import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
 import Sidebar from "@/components/layout/sidebar";
 import { NotificationBell } from "../components/layout/NotificationBell";
 import { useMemo, useState, useEffect } from "react";
-import { ticketApi } from "@/lib/ticket-api";
 
 export const Route = createFileRoute("/_authenticated")({
   beforeLoad: () => {
@@ -22,8 +21,8 @@ export const Route = createFileRoute("/_authenticated")({
   component: AuthenticatedLayout,
 });
 
-// 🔐 Safely parse your core numeric ID and role directly from the token string
-function useAuthIdentity() {
+// 🔐 STATELESS JWT PARSER: Supports Strings, Arrays, and Embedded Authority Objects
+function useCurrentUser() {
   return useMemo(() => {
     if (typeof window === "undefined") return null;
     const token = window.localStorage.getItem("accessToken");
@@ -33,54 +32,50 @@ function useAuthIdentity() {
       const base64Url = token.split(".")[1];
       const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
       const parsed = JSON.parse(window.atob(base64));
-      
-      // Pull IDs and Roles safely
-      const rawId = parsed.id || parsed.userId || parsed.sub || 1;
+
       const rawRole = parsed.role || parsed.roles || parsed.authority || "USER";
+      let cleanRole = "USER";
+
+      if (Array.isArray(rawRole)) {
+        const firstElement = rawRole[0];
+        if (typeof firstElement === "string") {
+          cleanRole = firstElement;
+        } else if (firstElement && typeof firstElement === "object" && firstElement.authority) {
+          cleanRole = firstElement.authority;
+        }
+      } else if (typeof rawRole === "object" && rawRole.authority) {
+        cleanRole = rawRole.authority;
+      } else if (typeof rawRole === "string") {
+        cleanRole = rawRole;
+      }
+
+      cleanRole = String(cleanRole).toUpperCase().replace("ROLE_", "").trim();
 
       return {
-        id: isNaN(Number(rawId)) ? 2 : Number(rawId), // Defaults safely to your user ID 2 if sub is text
-        role: String(rawRole).replace("ROLE_", ""),
+        id: parsed.id || parsed.userId || (parsed.sub && !isNaN(Number(parsed.sub)) ? Number(parsed.sub) : 1), 
+        username: parsed.username || "Agent",
+        role: cleanRole,
       };
     } catch (e) {
-      console.error("Failed decoding system session identity token:", e);
-      return { id: 2, role: "USER" }; // Reliable baseline fallback state
+      console.error("Failed decoding token tracking context claims:", e);
+      return null;
     }
   }, []);
 }
 
 function AuthenticatedLayout() {
-  const identity = useAuthIdentity();
-  const [realName, setRealName] = useState<string>("Agent");
-
-  // 🎯 REAL-TIME LOOKUP CROSS-REFERENCE MATCHING
+  const currentUser = useCurrentUser();
+  
+  // Guard against SSR hydration mismatches
+  const [mounted, setMounted] = useState<boolean>(false);
   useEffect(() => {
-    if (!identity?.id) return;
+    setMounted(true);
+  }, []);
 
-    const resolveTrueUsername = async () => {
-      try {
-        // Fetch the same list displayed on your users dashboard grid
-        const usersList = await ticketApi.getAllUsers();
-        const normalizedList = Array.isArray(usersList) ? usersList : (usersList as any).data || [];
-        
-        // Find the user object where the ID matches your logged-in ID (2)
-        const matchedUser = normalizedList.find((u: any) => Number(u.id) === identity.id);
-        
-        if (matchedUser && matchedUser.username) {
-          setRealName(matchedUser.username); // Will match ID 2 and set it cleanly to "chandrakesh"!
-        }
-      } catch (err) {
-        console.error("Failed cross-referencing user profile name descriptor:", err);
-      }
-    };
-
-    resolveTrueUsername();
-  }, [identity?.id]);
-
-  // Compute the alphabet char initial badge cleanly based on your matched user name string
   const nameInitial = useMemo(() => {
-    return realName.charAt(0).toUpperCase();
-  }, [realName]);
+    if (!currentUser?.username) return "A";
+    return currentUser.username.charAt(0).toUpperCase();
+  }, [currentUser?.username]);
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-gray-50 font-sans antialiased text-gray-800">
@@ -99,24 +94,22 @@ function AuthenticatedLayout() {
           </div>
 
           <div className="flex items-center gap-4">
-            {identity && <NotificationBell currentUserId={identity.id} />}
+            {mounted && currentUser && <NotificationBell currentUserId={currentUser.id} />}
             
             <div className="h-5 w-[1px] bg-gray-200" />
 
             <div className="flex items-center gap-2.5">
               <div className="text-right">
-                {/* Displaying your actual readable name string text layout cleanly here */}
                 <p className="text-xs font-bold text-gray-800 capitalize leading-none">
-                  {realName}
+                  {mounted ? currentUser?.username : "Agent"}
                 </p>
                 <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mt-1">
-                  {identity?.role} Operations
+                  {mounted ? `${currentUser?.role} Operations` : "Loading..."}
                 </p>
               </div>
               
-              {/* Clean avatar frame containing the first letter of your name ("C" for Chandrakesh) */}
               <div className="h-8 w-8 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 text-white font-black text-xs flex items-center justify-center shadow-md select-none tracking-wider">
-                {nameInitial}
+                {mounted ? nameInitial : "-"}
               </div>
             </div>
           </div>
