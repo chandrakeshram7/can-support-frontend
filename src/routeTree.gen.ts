@@ -15,6 +15,7 @@ import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedUsersRouteImport } from './routes/_authenticated/users'
 import { Route as AuthenticatedTicketsRouteImport } from './routes/_authenticated/tickets'
+import { Route as AuthenticatedRegistrationsRouteImport } from './routes/_authenticated/registrations'
 import { Route as AuthenticatedQueuesRouteImport } from './routes/_authenticated/queues'
 import { Route as AuthenticatedKnowledgeBaseRouteImport } from './routes/_authenticated/knowledge-base'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
@@ -51,6 +52,12 @@ const AuthenticatedTicketsRoute = AuthenticatedTicketsRouteImport.update({
   path: '/tickets',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+const AuthenticatedRegistrationsRoute =
+  AuthenticatedRegistrationsRouteImport.update({
+    id: '/registrations',
+    path: '/registrations',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 const AuthenticatedQueuesRoute = AuthenticatedQueuesRouteImport.update({
   id: '/queues',
   path: '/queues',
@@ -93,6 +100,7 @@ export interface FileRoutesByFullPath {
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/knowledge-base': typeof AuthenticatedKnowledgeBaseRoute
   '/queues': typeof AuthenticatedQueuesRoute
+  '/registrations': typeof AuthenticatedRegistrationsRoute
   '/tickets': typeof AuthenticatedTicketsRoute
   '/users': typeof AuthenticatedUsersRoute
   '/ticket/$ticketNumber': typeof AuthenticatedTicketTicketNumberRoute
@@ -106,6 +114,7 @@ export interface FileRoutesByTo {
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/knowledge-base': typeof AuthenticatedKnowledgeBaseRoute
   '/queues': typeof AuthenticatedQueuesRoute
+  '/registrations': typeof AuthenticatedRegistrationsRoute
   '/tickets': typeof AuthenticatedTicketsRoute
   '/users': typeof AuthenticatedUsersRoute
   '/ticket/$ticketNumber': typeof AuthenticatedTicketTicketNumberRoute
@@ -121,6 +130,7 @@ export interface FileRoutesById {
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/knowledge-base': typeof AuthenticatedKnowledgeBaseRoute
   '/_authenticated/queues': typeof AuthenticatedQueuesRoute
+  '/_authenticated/registrations': typeof AuthenticatedRegistrationsRoute
   '/_authenticated/tickets': typeof AuthenticatedTicketsRoute
   '/_authenticated/users': typeof AuthenticatedUsersRoute
   '/_authenticated/ticket/$ticketNumber': typeof AuthenticatedTicketTicketNumberRoute
@@ -136,6 +146,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/knowledge-base'
     | '/queues'
+    | '/registrations'
     | '/tickets'
     | '/users'
     | '/ticket/$ticketNumber'
@@ -149,6 +160,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/knowledge-base'
     | '/queues'
+    | '/registrations'
     | '/tickets'
     | '/users'
     | '/ticket/$ticketNumber'
@@ -163,6 +175,7 @@ export interface FileRouteTypes {
     | '/_authenticated/dashboard'
     | '/_authenticated/knowledge-base'
     | '/_authenticated/queues'
+    | '/_authenticated/registrations'
     | '/_authenticated/tickets'
     | '/_authenticated/users'
     | '/_authenticated/ticket/$ticketNumber'
@@ -219,6 +232,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedTicketsRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/registrations': {
+      id: '/_authenticated/registrations'
+      path: '/registrations'
+      fullPath: '/registrations'
+      preLoaderRoute: typeof AuthenticatedRegistrationsRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/_authenticated/queues': {
       id: '/_authenticated/queues'
       path: '/queues'
@@ -270,6 +290,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedKnowledgeBaseRoute: typeof AuthenticatedKnowledgeBaseRoute
   AuthenticatedQueuesRoute: typeof AuthenticatedQueuesRoute
+  AuthenticatedRegistrationsRoute: typeof AuthenticatedRegistrationsRoute
   AuthenticatedTicketsRoute: typeof AuthenticatedTicketsRoute
   AuthenticatedUsersRoute: typeof AuthenticatedUsersRoute
   AuthenticatedTicketTicketNumberRoute: typeof AuthenticatedTicketTicketNumberRoute
@@ -281,6 +302,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedKnowledgeBaseRoute: AuthenticatedKnowledgeBaseRoute,
   AuthenticatedQueuesRoute: AuthenticatedQueuesRoute,
+  AuthenticatedRegistrationsRoute: AuthenticatedRegistrationsRoute,
   AuthenticatedTicketsRoute: AuthenticatedTicketsRoute,
   AuthenticatedUsersRoute: AuthenticatedUsersRoute,
   AuthenticatedTicketTicketNumberRoute: AuthenticatedTicketTicketNumberRoute,

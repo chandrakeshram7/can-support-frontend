@@ -1,4 +1,5 @@
 import { Link } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
 import { 
   LayoutDashboard, 
   Ticket, 
@@ -8,21 +9,50 @@ import {
   Lightbulb,
   Radio,
   ChevronRight,
-  Shield
+  Shield,
+  ShieldCheck
 } from "lucide-react";
 
-// Mock session context hook — substitute this with your actual app auth context wrapper (e.g., useAuth())
-const useCurrentUserSession = () => {
-  return { id: 1, username: "Chandrakesh", role: "ADMIN" }; 
-};
+interface SessionUser {
+  username: string;
+  role: string;
+}
 
 export default function Sidebar() {
-  const currentUser = useCurrentUserSession();
+  // ✅ FIX: Default to a safe placeholder state that matches the initial server render
+  const [currentUser, setCurrentUser] = useState<SessionUser>({
+    username: "Operator",
+    role: "USER",
+  });
 
-  // Helper to safely extract initial letters for the profile avatar node block
+  // ✅ FIX: Wait until component mounts on the client side before touching localStorage / window
+  useEffect(() => {
+    const token = window.localStorage.getItem("accessToken");
+    if (!token) return;
+
+    try {
+      const base64Url = token.split(".")[1];
+      const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
+      const parsed = JSON.parse(window.atob(base64));
+      
+      const rawRole = parsed.role || parsed.roles || parsed.authorities || parsed.authority || "USER";
+      const roleString = Array.isArray(rawRole) ? rawRole[0] : rawRole;
+      const normalizedRole = String(roleString).toUpperCase().replace("ROLE_", "").trim();
+      
+      setCurrentUser({
+        username: parsed.username || parsed.sub || "Operator",
+        role: normalizedRole
+      });
+    } catch (err) {
+      console.error("Failed parsing session token claims on mount:", err);
+    }
+  }, []);
+
   const getInitials = (name: string) => {
     return name ? name.charAt(0).toUpperCase() : "A";
   };
+
+  const isManagementTier = currentUser.role === "ADMIN" || currentUser.role === "MANAGER";
 
   return (
     <div className="w-64 border-r border-gray-200 bg-white h-screen p-4 flex flex-col justify-between shrink-0 select-none shadow-sm z-30 font-sans antialiased">
@@ -100,8 +130,22 @@ export default function Sidebar() {
             <ChevronRight size={12} className="text-gray-300 opacity-0 group-hover:opacity-100 transition-all transform translate-x-[-4px] group-hover:translate-x-0" />
           </Link>
 
+          {/* Pending Approvals Conditional Link wrapper block */}
+          {isManagementTier && (
+            <Link 
+              to="/registrations" 
+              className="flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold text-gray-500 hover:bg-blue-50/40 hover:text-blue-700 transition-all border border-transparent hover:border-blue-100/30 group [&.active]:bg-blue-50/60 [&.active]:text-blue-600 [&.active]:border-blue-100/50"
+            >
+              <div className="flex items-center gap-2.5">
+                <ShieldCheck size={16} className="shrink-0 text-gray-400 group-hover:text-blue-600 transition-colors" />
+                <span>Pending Approvals</span>
+              </div>
+              <ChevronRight size={12} className="text-blue-300 opacity-0 group-hover:opacity-100 transition-all transform translate-x-[-4px] group-hover:translate-x-0" />
+            </Link>
+          )}
+
           {/* ADMIN BROADCAST SECTION - CONDITIONAL ACCESS ROUTE LINK */}
-          {currentUser?.role === "ADMIN" && (
+          {currentUser.role === "ADMIN" && (
             <Link 
               to="/broadcast" 
               className="flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold text-gray-500 hover:bg-red-50/40 hover:text-red-700 transition-all border border-transparent hover:border-red-100/30 group [&.active]:bg-red-50/60 [&.active]:text-red-600 [&.active]:border-red-100/50"
@@ -128,18 +172,18 @@ export default function Sidebar() {
         </div>
       </div>
 
-      {/* HIGH-DENSITY HIGH-CONTRAST INDIVIDUAL IDENTITY PROFILE FOOTER BANNER */}
+      {/* DYNAMIC PROFILE FOOTER */}
       <div className="pt-3 border-t border-gray-100 flex items-center gap-3 bg-gradient-to-r from-white to-gray-50/50 rounded-b-xl px-1">
         <div className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center font-black text-xs shadow-sm shadow-blue-600/20 shrink-0 select-none border border-blue-700/10">
-          {getInitials(currentUser?.username)}
+          {getInitials(currentUser.username)}
         </div>
         <div className="min-w-0 flex-1 space-y-0.5">
-          <div className="text-xs font-extrabold text-gray-900 truncate tracking-tight leading-none">
-            {currentUser?.username || "Anonymous Agent"}
+          <div className="text-xs font-extrabold text-gray-900 truncate tracking-tight leading-none capitalize">
+            {currentUser.username}
           </div>
           <div className="flex items-center gap-1 text-[10px] text-gray-400 font-bold uppercase tracking-wider">
-            {currentUser?.role === "ADMIN" && <Shield size={10} className="text-blue-500 shrink-0" />}
-            <span className="truncate">{currentUser?.role || "OPERATOR"}</span>
+            {currentUser.role === "ADMIN" && <Shield size={10} className="text-blue-500 shrink-0" />}
+            <span className="truncate">{currentUser.role}</span>
           </div>
         </div>
       </div>
