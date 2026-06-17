@@ -24,7 +24,6 @@ function getSessionRole(): string {
 }
 
 export const Route = createFileRoute("/_authenticated/registrations")({
-  // 🔐 CLIENT-SIDE ROUTE GUARD: Decodes token to verify role level clearance before layout mount
   beforeLoad: () => {
     if (typeof window === "undefined") return;
     const token = window.localStorage.getItem("accessToken");
@@ -59,6 +58,16 @@ function RegistrationApprovalsPage() {
   const [isProcessingId, setIsProcessingId] = useState<number | null>(null);
   const [apiErrorMsg, setApiErrorMsg] = useState<string | null>(null);
 
+  // ✅ ROBUST HOST DETECTOR: Guarantees that production deployments never fall back to localhost roots
+  const getBackendHost = () => {
+    if (typeof window === "undefined") return "https://can-support-backend.onrender.com";
+    const currentHost = window.location.hostname;
+    if (currentHost === "localhost" || currentHost === "127.0.0.1" || currentHost.startsWith("192.168.")) {
+      return "http://localhost:8080";
+    }
+    return "https://can-support-backend.onrender.com";
+  };
+
   useEffect(() => {
     fetchPendingRequests();
   }, []);
@@ -68,12 +77,10 @@ function RegistrationApprovalsPage() {
       setLoading(true);
       setApiErrorMsg(null);
       
-      const currentHost = window.location.hostname;
-      const host = (currentHost === "localhost" || currentHost === "127.0.0.1") 
-        ? "http://localhost:8080" 
-        : "https://can-support-backend.onrender.com";
-
+      const host = getBackendHost();
       const token = window.localStorage.getItem("accessToken");
+
+      console.log("Fetching approvals queue from computed production engine host target:", `${host}/users/pending`);
 
       const response = await fetch(`${host}/users/pending`, {
         method: "GET",
@@ -83,12 +90,20 @@ function RegistrationApprovalsPage() {
         }
       });
       
+      const rawText = await response.text();
+      
       if (response.ok) {
-        const data = await response.json();
-        setRequests(data || []);
+        try {
+          const data = JSON.parse(rawText);
+          setRequests(data || []);
+        } catch (jsonErr) {
+          console.error("Failed to parse response body string mapping stream:", rawText);
+          setApiErrorMsg("Backend Payload Error: Data stream response format mismatch.");
+          setRequests([]);
+        }
       } else {
-        if (response.status === 401) {
-          setApiErrorMsg("Backend returned 401 Unauthorized. Verify target environment filter chains parsing headers.");
+        if (response.status === 401 || response.status === 403) {
+          setApiErrorMsg(`Access Restricted (${response.status}): Ensure your account credentials maintain governance clear privileges on Render.`);
         } else {
           setApiErrorMsg(`Server responded with error status code: ${response.status}`);
         }
@@ -107,15 +122,10 @@ function RegistrationApprovalsPage() {
     if (isProcessingId !== null) return;
     try {
       setIsProcessingId(id);
-      const currentHost = window.location.hostname;
-      const host = (currentHost === "localhost" || currentHost === "127.0.0.1") 
-        ? "http://localhost:8080" 
-        : "https://can-support-backend.onrender.com";
-
+      const host = getBackendHost();
       const endpoint = `${host}/users/${id}/${approved ? "approve" : "deny"}`;
       const token = window.localStorage.getItem("accessToken");
       
-      // ✅ FIXED: Sending JSON.stringify({}) prevents the embedded Tomcat container from rejecting empty POST structures with a 400 bad request error
       const response = await fetch(endpoint, {
         method: "POST",
         headers: {
