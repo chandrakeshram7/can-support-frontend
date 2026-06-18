@@ -2,7 +2,7 @@ if (typeof global === "undefined") {
   (window as any).global = window;
 }
 
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { 
   ChevronDown, 
@@ -25,7 +25,8 @@ import {
   BookmarkCheck,
   Unlock,
   Maximize2,
-  Minimize2
+  Minimize2,
+  EyeOff
 } from "lucide-react";
 
 import { ticketApi, UserDropdown } from "@/lib/ticket-api";
@@ -42,7 +43,7 @@ const getBackendBaseUrl = (): string => {
   return "https://can-support-backend.onrender.com";
 };
 
-// HELPER UTILITY: Decodes roles from JWT clientside safely
+// 🔑 REFACTORED UTILITY: Decodes roles and normalizes strings to strip array and authority objects perfectly
 const getUserRoles = (): string[] => {
   try {
     const token = localStorage.getItem("accessToken");
@@ -57,7 +58,15 @@ const getUserRoles = (): string[] => {
         .join("")
     );
     const parsed = JSON.parse(jsonPayload);
-    return Array.isArray(parsed.roles) ? parsed.roles : parsed.role ? [parsed.role] : [];
+    
+    // Scans across all common JWT claim payload architectures
+    const rawRoles = parsed.roles || parsed.role || parsed.authorities || parsed.authority || [];
+    const rolesArray = Array.isArray(rawRoles) ? rawRoles : [rawRoles];
+    
+    return rolesArray.map((r: any) => {
+      const roleStr = typeof r === "object" ? (r.authority || r.role || "") : String(r);
+      return roleStr.toUpperCase().trim();
+    });
   } catch (e) {
     console.error("Failed to parse user session roles token payload:", e);
     return [];
@@ -69,6 +78,14 @@ function TicketDetailsPage() {
   const [ticket, setTicket] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [uiMessage, setUiMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  const roles = useMemo(() => getUserRoles(), []);
+  
+  // ✅ FIXED MATCHING: Tolerates prefix differences seamlessly to avoid accidental access lockouts
+  const isEscalationManager = useMemo(() => 
+    roles.includes("ROLE_ESCALATION_MANAGER") || roles.includes("ESCALATION_MANAGER"), 
+    [roles]
+  );
 
   useEffect(() => {
     if (ticketNumber) {
@@ -126,7 +143,6 @@ function TicketDetailsPage() {
       });
     }
 
-    // Sort with newest items rendering at the very top of the feed desk
     return items.sort((a, b) => b.sortDate - a.sortDate);
   }, [ticket]);
 
@@ -173,6 +189,23 @@ function TicketDetailsPage() {
 
   const isEscalatedStatus = ticket.ticketStatus === "ESCALATED" || ticket.isEscalated;
 
+  // 🔐 HARD SECURITY GUARD LAYER
+  if (isEscalatedStatus && !isEscalationManager) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4 font-sans antialiased">
+        <div className="text-center max-w-sm bg-white p-6 border border-gray-200 rounded-2xl shadow-sm space-y-3">
+          <div className="w-10 h-10 bg-red-50 text-red-600 rounded-xl flex items-center justify-center mx-auto border border-red-100">
+            <EyeOff size={18} />
+          </div>
+          <h2 className="text-sm font-extrabold text-gray-900 tracking-tight uppercase">Access Restricted</h2>
+          <p className="text-xs text-gray-400 font-semibold leading-normal">
+            This ticket has been escalated under SLA procedures. Standard user profiles do not possess authorization to audit this tracking node.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 p-4 font-sans antialiased text-gray-800">
       <div className="max-w-6xl mx-auto space-y-3.5">
@@ -189,7 +222,7 @@ function TicketDetailsPage() {
 
         {/* CRITICAL ESCALATION ATTENTION HEADER BANNER */}
         {isEscalatedStatus && (
-          <div className="flex items-start gap-3 bg-gradient-to-r from-red-600 to-red-700 text-white rounded-xl p-4 shadow-md border border-red-700 animate-pulse">
+          <div className="flex items-start gap-3 bg-gradient-to-r from-red-600 to-red-700 text-white rounded-xl p-4 shadow-md border border-red-700">
             <ShieldAlert size={20} className="shrink-0 mt-0.5" />
             <div className="space-y-0.5">
               <h3 className="font-black text-xs uppercase tracking-wider">SLA Escalation Breach Triggered ({ticket.escalationReason || "USER_REQUESTED"})</h3>
@@ -280,7 +313,7 @@ function TicketDetailsPage() {
           {/* TWO COLUMN DISPOSITION LAYOUT VIEWPORT CONTAINER */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 pt-2 items-start">
             
-            {/* COLUMN LEFT: REFACTORED HIGH DENSITY LIFECYCLE LEDGER FEED */}
+            {/* COLUMN LEFT: TIMELINE FEED */}
             <div className="lg:col-span-2 space-y-3">
               <div className="flex items-center justify-between border-b border-gray-100 pb-2.5 mb-1">
                 <div className="flex items-center gap-1.5">
@@ -292,7 +325,6 @@ function TicketDetailsPage() {
                 </span>
               </div>
               
-              {/* TIMELINE TIMELINE STREAM ROW CONTAINER BLOCK */}
               <div className="space-y-3 max-h-[600px] overflow-y-auto pr-1">
                 {unifiedTimeline.length ? (
                   unifiedTimeline.map((item, index) => (
@@ -304,14 +336,13 @@ function TicketDetailsPage() {
                   ))
                 ) : (
                   <div className="border border-dashed border-gray-300 rounded-xl p-8 text-center text-gray-400 font-bold uppercase text-[10px] tracking-wider bg-gray-50/50">
-                    <Inbox size={20} className="text-gray-300 mx-auto mb-1.5" />
                     No lifecycle ledger parameters recorded yet.
                   </div>
                 )}
               </div>
             </div>
 
-            {/* COLUMN RIGHT: INTERACTIVE OPERATION INTERACTION ACTIONS PANEL */}
+            {/* COLUMN RIGHT: ACTIONS PANEL */}
             <div className="space-y-4">
               <div className="flex items-center gap-1.5 border-b border-gray-100 pb-2">
                 <FileText size={14} className="text-gray-400" />
@@ -334,7 +365,6 @@ function TicketDetailsPage() {
   );
 }
 
-// ✅ REFACTORED WORKSPACE: Highly responsive, intuitive collapsible timeline block card layout
 function TimelineCard({ item, onDownloadRequest }: { item: any; onDownloadRequest: any }) {
   const [expanded, setExpanded] = useState<boolean>(false);
   const isMovement = item.timelineType === "MOVEMENT";
@@ -347,7 +377,6 @@ function TimelineCard({ item, onDownloadRequest }: { item: any; onDownloadReques
         : "bg-white border-gray-200/80 hover:border-gray-300 shadow-sm"
     }`}>
       
-      {/* Upper Interactive Row Header Trigger */}
       <div 
         onClick={() => setExpanded(!expanded)}
         className="p-3 flex items-center justify-between gap-3 cursor-pointer select-none"
@@ -379,7 +408,6 @@ function TimelineCard({ item, onDownloadRequest }: { item: any; onDownloadReques
           </div>
         </div>
 
-        {/* Dynamic Expand Indicators */}
         <div className="flex items-center gap-3 shrink-0 pl-1">
           {hasAttachments && (
             <span className="text-[10px] font-black bg-blue-50 text-blue-600 border border-blue-100 rounded px-1.5 py-0.5 flex items-center gap-0.5">
@@ -392,7 +420,6 @@ function TimelineCard({ item, onDownloadRequest }: { item: any; onDownloadReques
         </div>
       </div>
 
-      {/* Collapsible Content Body Segment Panel */}
       {expanded && (
         <div className="px-4 pb-3.5 pt-1 border-t border-gray-100 bg-gray-50/30 text-left">
           {isMovement ? (
@@ -436,7 +463,6 @@ function TimelineCard({ item, onDownloadRequest }: { item: any; onDownloadReques
           )}
         </div>
       )}
-
     </div>
   );
 }
@@ -451,15 +477,21 @@ function TicketActionButtons({
   const [submitting, setSubmitting] = useState(false);
   const [resolutionText, setResolutionText] = useState("");
   const [memberId, setMemberId] = useState("");
-  
   const [replyText, setReplyText] = useState("");
   const [escalationNotes, setEscalationNotes] = useState(""); 
   const [users, setUsers] = useState<UserDropdown[]>([]);
 
   const roles = useMemo(() => getUserRoles(), []);
-  const isEscalationManager = useMemo(() => roles.includes("ROLE_ESCALATION_MANAGER"), [roles]);
+  
+  // ✅ FIXED COMPATIBILITY MARKERS
+  const isEscalationManager = useMemo(() => 
+    roles.includes("ROLE_ESCALATION_MANAGER") || roles.includes("ESCALATION_MANAGER"), 
+    [roles]
+  );
 
   const isCurrentlyEscalated = ticket.ticketStatus === "ESCALATED" || ticket.isEscalated;
+  
+  // ✅ DYNAMIC FORM TOGGLE: Unlocks administrative panels instantly for Escalation Managers
   const isActionDisabled = submitting || (isCurrentlyEscalated && !isEscalationManager);
 
   useEffect(() => {
